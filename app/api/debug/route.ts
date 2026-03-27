@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC07Ha41-6z6hFIj5J4G_xLmTNv4HDI3LY';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
 
 async function callGeminiWithRetry(url: string, body: object, retries = 3): Promise<Response> {
   for (let i = 0; i < retries; i++) {
