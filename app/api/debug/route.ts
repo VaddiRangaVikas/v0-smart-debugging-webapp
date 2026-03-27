@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC07Ha41-6z6hFIj5J4G_xLmTNv4HDI3LY';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+const OPENROUTER_API_KEY = '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';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-async function callGeminiWithRetry(url: string, body: object, retries = 3): Promise<Response> {
+async function callOpenRouterWithRetry(body: object, retries = 3): Promise<Response> {
   for (let i = 0; i < retries; i++) {
-    const response = await fetch(url, {
+    const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://v0.dev',
+        'X-Title': 'AI Debug Assistant',
+      },
       body: JSON.stringify(body),
     });
     
     if (response.ok) return response;
     
     if (response.status === 429 && i < retries - 1) {
-      // Wait before retrying (exponential backoff)
       await new Promise(resolve => setTimeout(resolve, (i + 1) * 2000));
       continue;
     }
@@ -187,43 +191,42 @@ ${explanationLanguage !== 'english' ? `IMPORTANT: Provide all text explanations 
 Respond with ONLY the JSON object, no additional text or markdown formatting.`;
 
     const requestBody = {
-      contents: [
+      model: 'google/gemini-2.0-flash-001',
+      messages: [
         {
-          parts: [
-            {
-              text: prompt,
-            },
-          ],
+          role: 'user',
+          content: prompt,
         },
       ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4096,
-      },
+      temperature: 0.7,
+      max_tokens: 4096,
     };
 
-    const response = await callGeminiWithRetry(
-      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-      requestBody
-    );
+    const response = await callOpenRouterWithRetry(requestBody);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API error:', errorText);
+      console.error('OpenRouter API error:', errorText);
       
-      // Check if it's a rate limit error
       if (response.status === 429) {
         return NextResponse.json(
-          { error: 'API rate limit exceeded. Please wait a moment and try again, or use a different API key.' },
+          { error: 'API rate limit exceeded. Please wait a moment and try again.' },
           { status: 429 }
         );
       }
       
-      throw new Error(`Gemini API error: ${response.status}`);
+      if (response.status === 401) {
+        return NextResponse.json(
+          { error: 'Invalid API key. Please check your OpenRouter API key.' },
+          { status: 401 }
+        );
+      }
+      
+      throw new Error(`OpenRouter API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const textContent = data.choices?.[0]?.message?.content || '';
     
     // Clean the response - remove markdown code blocks if present
     let cleanedContent = textContent.trim();
@@ -241,7 +244,7 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     try {
       parsedResult = JSON.parse(cleanedContent);
     } catch {
-      console.error('Failed to parse Gemini response:', cleanedContent);
+      console.error('Failed to parse OpenRouter response:', cleanedContent);
       throw new Error('Failed to parse AI response');
     }
 
