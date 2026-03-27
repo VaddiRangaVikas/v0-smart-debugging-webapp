@@ -19,11 +19,14 @@ import {
   Youtube,
   FileText,
   ExternalLink,
+  Zap,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 import type { DebugResult, LearningMode } from '@/lib/types';
 
 interface DebugOutputProps {
@@ -36,11 +39,21 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
 
   if (!result) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8">
         <div className="text-center">
-          <Bug className="mx-auto h-12 w-12 opacity-50" />
-          <p className="mt-4 text-sm">Debug output will appear here</p>
-          <p className="mt-1 text-xs opacity-70">Enter code and press Ctrl+Enter to start debugging</p>
+          <div className="relative mx-auto mb-6 flex h-20 w-20 items-center justify-center">
+            <div className="absolute inset-0 rounded-2xl bg-primary/10 animate-pulse" />
+            <div className="absolute inset-2 rounded-xl border border-dashed border-primary/30" />
+            <Bug className="relative h-8 w-8 text-primary/50" />
+          </div>
+          <h3 className="mb-2 text-lg font-semibold text-foreground">Ready to Debug</h3>
+          <p className="text-sm text-muted-foreground">
+            Enter code and press <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Ctrl+Enter</kbd> to start
+          </p>
+          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-neon-cyan animate-pulse" />
+            <span>AI-powered analysis ready</span>
+          </div>
         </div>
       </div>
     );
@@ -48,145 +61,170 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
 
   return (
     <ScrollArea className="h-full">
-      <div className="space-y-4 p-1">
+      <div className="space-y-4 p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="learning">Learning</TabsTrigger>
-            <TabsTrigger value="modes">Modes</TabsTrigger>
-            <TabsTrigger value="resources">Resources</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 bg-secondary/50">
+            <TabsTrigger value="overview" className="gap-1.5 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Zap className="h-3 w-3" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="learning" className="gap-1.5 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <BookOpen className="h-3 w-3" />
+              Learning
+            </TabsTrigger>
+            <TabsTrigger value="modes" className="gap-1.5 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Brain className="h-3 w-3" />
+              Modes
+            </TabsTrigger>
+            <TabsTrigger value="resources" className="gap-1.5 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <FileText className="h-3 w-3" />
+              Resources
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-4 space-y-4">
             {/* Intent */}
-            <Card>
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-blue-500/30 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Target className="h-4 w-4 text-blue-500" />
-                  Intent
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500/10">
+                    <Target className="h-3.5 w-3.5 text-blue-400" />
+                  </div>
+                  <span>Intent</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">{result.intent}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{result.intent}</p>
               </CardContent>
             </Card>
 
             {/* Actual Behavior */}
-            <Card>
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-orange-500/30 hover:shadow-[0_0_20px_rgba(249,115,22,0.1)]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Cog className="h-4 w-4 text-orange-500" />
-                  Actual Behavior
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-orange-500/10">
+                    <Cog className="h-3.5 w-3.5 text-orange-400" />
+                  </div>
+                  <span>Actual Behavior</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">{result.actualBehavior}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{result.actualBehavior}</p>
               </CardContent>
             </Card>
 
             {/* Error */}
-            <Card className="border-destructive/50">
+            <Card className="border-destructive/30 bg-destructive/5 backdrop-blur-sm shadow-[0_0_20px_rgba(239,68,68,0.1)]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  Error
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-destructive/10 animate-pulse">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  </div>
+                  <span>Error Detected</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm">{result.error}</p>
+                <p className="font-mono text-sm leading-relaxed text-destructive">{result.error}</p>
               </CardContent>
             </Card>
 
             {/* Explanation */}
-            <Card>
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-yellow-500/30 hover:shadow-[0_0_20px_rgba(234,179,8,0.1)]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Lightbulb className="h-4 w-4 text-yellow-500" />
-                  Explanation
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-yellow-500/10">
+                    <Lightbulb className="h-3.5 w-3.5 text-yellow-400" />
+                  </div>
+                  <span>Explanation</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.explanation}</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{result.explanation}</p>
               </CardContent>
             </Card>
 
             {/* Root Cause */}
-            <Card>
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Search className="h-4 w-4 text-purple-500" />
-                  Root Cause
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-purple-500/10">
+                    <Search className="h-3.5 w-3.5 text-purple-400" />
+                  </div>
+                  <span>Root Cause</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">{result.rootCause}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{result.rootCause}</p>
               </CardContent>
             </Card>
 
             {/* Mental Model */}
             {result.mentalModel && (
-              <Card className="border-primary/30 bg-primary/5">
-                <CardHeader className="pb-2">
+              <Card className="relative overflow-hidden border-primary/30 bg-primary/5 backdrop-blur-sm">
+                <div className="absolute inset-0 bg-gradient-to-r from-neon-cyan/5 via-transparent to-neon-purple/5" />
+                <CardHeader className="relative pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <Brain className="h-4 w-4 text-primary" />
-                    Mental Model / Analogy
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20">
+                      <Brain className="h-3.5 w-3.5 text-primary" />
+                    </div>
+                    <span className="text-glow-cyan">Mental Model / Analogy</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm italic text-muted-foreground">{result.mentalModel}</p>
+                <CardContent className="relative">
+                  <p className="text-sm italic leading-relaxed text-muted-foreground">{result.mentalModel}</p>
                 </CardContent>
               </Card>
             )}
 
             {/* Generalization */}
             {result.generalization && (
-              <Card>
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-cyan-500/30 hover:shadow-[0_0_20px_rgba(6,182,212,0.1)]">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <RefreshCw className="h-4 w-4 text-cyan-500" />
-                    Generalization
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/10">
+                      <RefreshCw className="h-3.5 w-3.5 text-cyan-400" />
+                    </div>
+                    <span>Generalization</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">{result.generalization}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{result.generalization}</p>
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
           <TabsContent value="learning" className="mt-4 space-y-4">
-            <Card>
+            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <BookOpen className="h-4 w-4 text-green-500" />
-                  Learning Section
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-500/10">
+                    <BookOpen className="h-3.5 w-3.5 text-green-400" />
+                  </div>
+                  <span>Learning Section</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                    Why It Happened
-                  </h4>
-                  <p className="text-sm">{result.learning.whyItHappened}</p>
-                </div>
-                <div>
-                  <h4 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                    When It Happens
-                  </h4>
-                  <p className="text-sm">{result.learning.whenItHappens}</p>
-                </div>
-                <div>
-                  <h4 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                    How to Avoid
-                  </h4>
-                  <p className="text-sm">{result.learning.howToAvoid}</p>
-                </div>
-                <div>
-                  <h4 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                    Concept
-                  </h4>
-                  <p className="text-sm">{result.learning.concept}</p>
-                </div>
+              <CardContent className="space-y-6">
+                <LearningItem
+                  title="Why It Happened"
+                  content={result.learning.whyItHappened}
+                  color="blue"
+                />
+                <LearningItem
+                  title="When It Happens"
+                  content={result.learning.whenItHappens}
+                  color="orange"
+                />
+                <LearningItem
+                  title="How to Avoid"
+                  content={result.learning.howToAvoid}
+                  color="green"
+                />
+                <LearningItem
+                  title="Concept"
+                  content={result.learning.concept}
+                  color="purple"
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -194,64 +232,58 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
           <TabsContent value="modes" className="mt-4 space-y-4">
             {/* Teacher Mode */}
             {result.teacherMode && (
-              <Card className={learningMode === 'teacher' ? 'ring-2 ring-primary' : ''}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <GraduationCap className="h-4 w-4 text-indigo-500" />
-                    Teacher Mode
-                    {learningMode === 'teacher' && <Badge variant="secondary" className="ml-2">Active</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.teacherMode}</p>
-                </CardContent>
-              </Card>
+              <ModeCard
+                title="Teacher Mode"
+                icon={GraduationCap}
+                content={result.teacherMode}
+                isActive={learningMode === 'teacher'}
+                color="indigo"
+              />
             )}
 
             {/* Think Mode (Socratic) */}
             {result.thinkMode && (
-              <Card className={learningMode === 'think' ? 'ring-2 ring-primary' : ''}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <HelpCircle className="h-4 w-4 text-amber-500" />
-                    Think Mode (Socratic)
-                    {learningMode === 'think' && <Badge variant="secondary" className="ml-2">Active</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.thinkMode}</p>
-                </CardContent>
-              </Card>
+              <ModeCard
+                title="Think Mode (Socratic)"
+                icon={HelpCircle}
+                content={result.thinkMode}
+                isActive={learningMode === 'think'}
+                color="amber"
+              />
             )}
 
             {/* Concept Builder */}
             {result.conceptBuilder && (
-              <Card className={learningMode === 'concept' ? 'ring-2 ring-primary' : ''}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Puzzle className="h-4 w-4 text-teal-500" />
-                    Concept Builder
-                    {learningMode === 'concept' && <Badge variant="secondary" className="ml-2">Active</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.conceptBuilder}</p>
-                </CardContent>
-              </Card>
+              <ModeCard
+                title="Concept Builder"
+                icon={Puzzle}
+                content={result.conceptBuilder}
+                isActive={learningMode === 'concept'}
+                color="teal"
+              />
             )}
 
             {/* Debug Trace */}
             {result.debugTrace && (
-              <Card className={learningMode === 'trace' ? 'ring-2 ring-primary' : ''}>
+              <Card className={cn(
+                'border-border/50 bg-card/50 backdrop-blur-sm transition-all',
+                learningMode === 'trace' && 'ring-2 ring-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]'
+              )}>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <Bug className="h-4 w-4 text-red-500" />
-                    Debug Trace
-                    {learningMode === 'trace' && <Badge variant="secondary" className="ml-2">Active</Badge>}
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10">
+                      <Bug className="h-3.5 w-3.5 text-red-400" />
+                    </div>
+                    <span>Debug Trace</span>
+                    {learningMode === 'trace' && (
+                      <Badge variant="secondary" className="ml-2 animate-pulse bg-red-500/20 text-red-400">
+                        Active
+                      </Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/50 p-3 rounded-md overflow-x-auto">
+                  <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted/50 p-4 font-mono text-xs text-muted-foreground">
                     {result.debugTrace}
                   </pre>
                 </CardContent>
@@ -260,45 +292,37 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
 
             {/* Interview Mode */}
             {result.interviewMode && (
-              <Card className={learningMode === 'interview' ? 'ring-2 ring-primary' : ''}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Briefcase className="h-4 w-4 text-slate-500" />
-                    Interview Mode
-                    {learningMode === 'interview' && <Badge variant="secondary" className="ml-2">Active</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.interviewMode}</p>
-                </CardContent>
-              </Card>
+              <ModeCard
+                title="Interview Mode"
+                icon={Briefcase}
+                content={result.interviewMode}
+                isActive={learningMode === 'interview'}
+                color="slate"
+              />
             )}
 
             {/* Challenge Mode */}
             {result.challengeMode && (
-              <Card className={learningMode === 'challenge' ? 'ring-2 ring-primary' : ''}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Gamepad2 className="h-4 w-4 text-pink-500" />
-                    Challenge Mode
-                    {learningMode === 'challenge' && <Badge variant="secondary" className="ml-2">Active</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.challengeMode}</p>
-                </CardContent>
-              </Card>
+              <ModeCard
+                title="Challenge Mode"
+                icon={Gamepad2}
+                content={result.challengeMode}
+                isActive={learningMode === 'challenge'}
+                color="pink"
+              />
             )}
           </TabsContent>
 
           <TabsContent value="resources" className="mt-4 space-y-4">
             {/* YouTube Links */}
             {result.resources.youtubeLinks.length > 0 && (
-              <Card>
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <Youtube className="h-4 w-4 text-red-500" />
-                    YouTube Resources
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10">
+                      <Youtube className="h-3.5 w-3.5 text-red-400" />
+                    </div>
+                    <span>YouTube Resources</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -309,10 +333,10 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
                           href={link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-primary hover:underline"
+                          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary transition-all hover:bg-primary/10"
                         >
-                          <ExternalLink className="h-3 w-3" />
-                          {link}
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span className="truncate">{link}</span>
                         </a>
                       </li>
                     ))}
@@ -323,11 +347,13 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
 
             {/* Documentation Links */}
             {result.resources.documentationLinks.length > 0 && (
-              <Card>
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <FileText className="h-4 w-4 text-blue-500" />
-                    Documentation
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500/10">
+                      <FileText className="h-3.5 w-3.5 text-blue-400" />
+                    </div>
+                    <span>Documentation</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -338,10 +364,10 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
                           href={link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-primary hover:underline"
+                          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary transition-all hover:bg-primary/10"
                         >
-                          <ExternalLink className="h-3 w-3" />
-                          {link}
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span className="truncate">{link}</span>
                         </a>
                       </li>
                     ))}
@@ -351,14 +377,80 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
             )}
 
             {result.resources.youtubeLinks.length === 0 && result.resources.documentationLinks.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <FileText className="h-8 w-8 opacity-50" />
-                <p className="mt-2 text-sm">No additional resources available</p>
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <FileText className="h-12 w-12 opacity-30" />
+                <p className="mt-4 text-sm">No additional resources available</p>
               </div>
             )}
           </TabsContent>
         </Tabs>
       </div>
     </ScrollArea>
+  );
+}
+
+function LearningItem({ title, content, color }: { title: string; content: string; color: string }) {
+  const colorMap: Record<string, string> = {
+    blue: 'border-l-blue-500',
+    orange: 'border-l-orange-500',
+    green: 'border-l-green-500',
+    purple: 'border-l-purple-500',
+  };
+
+  return (
+    <div className={cn('border-l-2 pl-4', colorMap[color])}>
+      <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h4>
+      <p className="text-sm leading-relaxed text-foreground">{content}</p>
+    </div>
+  );
+}
+
+function ModeCard({
+  title,
+  icon: Icon,
+  content,
+  isActive,
+  color,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  content: string;
+  isActive: boolean;
+  color: string;
+}) {
+  const colorMap: Record<string, { bg: string; text: string; ring: string }> = {
+    indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', ring: 'ring-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.2)]' },
+    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', ring: 'ring-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]' },
+    teal: { bg: 'bg-teal-500/10', text: 'text-teal-400', ring: 'ring-teal-500/50 shadow-[0_0_20px_rgba(20,184,166,0.2)]' },
+    slate: { bg: 'bg-slate-500/10', text: 'text-slate-400', ring: 'ring-slate-500/50 shadow-[0_0_20px_rgba(100,116,139,0.2)]' },
+    pink: { bg: 'bg-pink-500/10', text: 'text-pink-400', ring: 'ring-pink-500/50 shadow-[0_0_20px_rgba(236,72,153,0.2)]' },
+  };
+
+  const colors = colorMap[color];
+
+  return (
+    <Card className={cn(
+      'border-border/50 bg-card/50 backdrop-blur-sm transition-all',
+      isActive && `ring-2 ${colors.ring}`
+    )}>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <div className={cn('flex h-6 w-6 items-center justify-center rounded-md', colors.bg)}>
+            <Icon className={cn('h-3.5 w-3.5', colors.text)} />
+          </div>
+          <span>{title}</span>
+          {isActive && (
+            <Badge variant="secondary" className={cn('ml-2 animate-pulse', colors.bg, colors.text)}>
+              Active
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{content}</p>
+      </CardContent>
+    </Card>
   );
 }
