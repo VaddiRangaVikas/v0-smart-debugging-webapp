@@ -50,15 +50,18 @@ export default function DebugAssistant() {
         }),
       });
 
+      const data = await response.json();
+      
       if (!response.ok) {
-        throw new Error('Failed to debug code');
+        // Handle specific error messages from the API
+        setError(data.error || 'Failed to debug code. Please try again.');
+        return;
       }
 
-      const data = await response.json();
       setResult(data);
     } catch (err) {
       console.error('Debug error:', err);
-      setError('Failed to debug code. Please try again.');
+      setError('Failed to connect to the AI service. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }

@@ -2,7 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC07Ha41-6z6hFIj5J4G_xLmTNv4HDI3LY';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+async function callGeminiWithRetry(url: string, body: object, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (response.ok) return response;
+    
+    if (response.status === 429 && i < retries - 1) {
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, (i + 1) * 2000));
+      continue;
+    }
+    
+    return response;
+  }
+  throw new Error('Max retries exceeded');
+}
 
 function detectLanguage(code: string): ProgrammingLanguage {
   const patterns: Record<ProgrammingLanguage, RegExp[]> = {
@@ -165,31 +186,39 @@ ${explanationLanguage !== 'english' ? `IMPORTANT: Provide all text explanations 
 
 Respond with ONLY the JSON object, no additional text or markdown formatting.`;
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 8192,
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
         },
-      }),
-    });
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+      },
+    };
+
+    const response = await callGeminiWithRetry(
+      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
+      requestBody
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Gemini API error:', errorText);
+      
+      // Check if it's a rate limit error
+      if (response.status === 429) {
+        return NextResponse.json(
+          { error: 'API rate limit exceeded. Please wait a moment and try again, or use a different API key.' },
+          { status: 429 }
+        );
+      }
+      
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
