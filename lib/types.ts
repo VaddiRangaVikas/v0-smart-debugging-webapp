@@ -15,7 +15,26 @@ export type ProgrammingLanguage =
   | 'kotlin'
   | 'sql';
 
-export type ExplanationLanguage = 'english' | 'hindi' | 'tamil';
+export type ExplanationLanguage = 
+  | 'english' 
+  | 'hindi' 
+  | 'telugu' 
+  | 'tamil' 
+  | 'kannada' 
+  | 'malayalam' 
+  | 'marathi' 
+  | 'bengali' 
+  | 'gujarati' 
+  | 'punjabi'
+  | 'spanish'
+  | 'french'
+  | 'german'
+  | 'chinese'
+  | 'japanese'
+  | 'korean'
+  | 'arabic'
+  | 'portuguese'
+  | 'russian';
 
 export type UserLevel = 'beginner' | 'intermediate' | 'advanced';
 

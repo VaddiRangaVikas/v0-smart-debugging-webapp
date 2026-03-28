@@ -30,37 +30,165 @@ async function callOpenRouterWithRetry(body: object, retries = 3): Promise<Respo
 }
 
 function detectLanguage(code: string): ProgrammingLanguage {
-  const patterns: Record<ProgrammingLanguage, RegExp[]> = {
-    python: [/\bdef\s+\w+\s*\(/, /\bprint\s*\(/, /\bimport\s+\w+/, /:\s*$/m, /\bself\./],
-    javascript: [/\bconst\s+\w+/, /\blet\s+\w+/, /\bfunction\s+\w+/, /=>\s*{/, /console\.log/],
-    typescript: [/:\s*(string|number|boolean|any)/, /interface\s+\w+/, /type\s+\w+\s*=/, /<\w+>/],
-    java: [/\bpublic\s+class/, /\bSystem\.out\.print/, /\bpublic\s+static\s+void\s+main/, /\bimport\s+java\./],
-    c: [/\b#include\s*</, /\bint\s+main\s*\(/, /\bprintf\s*\(/, /\bscanf\s*\(/],
-    cpp: [/\b#include\s*<iostream>/, /\bcout\s*<</, /\bcin\s*>>/, /\busing\s+namespace\s+std/],
-    csharp: [/\busing\s+System/, /\bnamespace\s+\w+/, /\bConsole\.Write/],
-    go: [/\bpackage\s+\w+/, /\bfunc\s+\w+/, /\bfmt\.Print/],
-    rust: [/\bfn\s+\w+/, /\blet\s+mut/, /\bprintln!\s*\(/],
-    php: [/<\?php/, /\$\w+\s*=/, /\becho\s+/],
-    ruby: [/\bdef\s+\w+/, /\bputs\s+/, /\bend\s*$/m, /\brequire\s+['"]/],
-    swift: [/\bvar\s+\w+:/, /\bfunc\s+\w+/, /\bprint\s*\(/],
-    kotlin: [/\bfun\s+\w+/, /\bval\s+\w+/, /\bprintln\s*\(/],
-    sql: [/\bSELECT\s+/i, /\bFROM\s+/i, /\bWHERE\s+/i, /\bINSERT\s+INTO/i],
+  // Enhanced patterns with weights for better detection
+  const patterns: Record<ProgrammingLanguage, { pattern: RegExp; weight: number }[]> = {
+    python: [
+      { pattern: /\bdef\s+\w+\s*\(/, weight: 3 },
+      { pattern: /\bprint\s*\([^)]*\)/, weight: 2 },
+      { pattern: /^import\s+\w+/m, weight: 2 },
+      { pattern: /^from\s+\w+\s+import/m, weight: 3 },
+      { pattern: /:\s*$/m, weight: 1 },
+      { pattern: /\bself\./, weight: 3 },
+      { pattern: /\bif\s+__name__\s*==\s*['"]__main__['"]/, weight: 5 },
+      { pattern: /\bclass\s+\w+.*:/, weight: 2 },
+      { pattern: /\belif\s+/, weight: 3 },
+      { pattern: /\bTrue\b|\bFalse\b|\bNone\b/, weight: 2 },
+    ],
+    javascript: [
+      { pattern: /\bconst\s+\w+\s*=/, weight: 2 },
+      { pattern: /\blet\s+\w+\s*=/, weight: 2 },
+      { pattern: /\bfunction\s+\w+\s*\(/, weight: 2 },
+      { pattern: /=>\s*[{(]/, weight: 3 },
+      { pattern: /console\.log\s*\(/, weight: 3 },
+      { pattern: /\bvar\s+\w+\s*=/, weight: 1 },
+      { pattern: /\brequire\s*\(['"]/, weight: 2 },
+      { pattern: /\bmodule\.exports/, weight: 3 },
+      { pattern: /===|!==/, weight: 1 },
+      { pattern: /\.then\s*\(/, weight: 2 },
+    ],
+    typescript: [
+      { pattern: /:\s*(string|number|boolean|any|void)\b/, weight: 4 },
+      { pattern: /\binterface\s+\w+\s*{/, weight: 4 },
+      { pattern: /\btype\s+\w+\s*=/, weight: 4 },
+      { pattern: /<\w+>/, weight: 2 },
+      { pattern: /\bas\s+\w+/, weight: 3 },
+      { pattern: /\benum\s+\w+/, weight: 4 },
+      { pattern: /:\s*\w+\[\]/, weight: 3 },
+      { pattern: /\bReadonly</, weight: 5 },
+      { pattern: /\bPartial</, weight: 5 },
+    ],
+    java: [
+      { pattern: /\bpublic\s+class\s+\w+/, weight: 5 },
+      { pattern: /\bSystem\.out\.print/, weight: 5 },
+      { pattern: /\bpublic\s+static\s+void\s+main/, weight: 6 },
+      { pattern: /\bimport\s+java\./, weight: 4 },
+      { pattern: /\bprivate\s+(int|String|boolean|double|float)/, weight: 4 },
+      { pattern: /\bextends\s+\w+/, weight: 2 },
+      { pattern: /\bimplements\s+\w+/, weight: 3 },
+      { pattern: /\bnew\s+\w+\s*\(/, weight: 1 },
+      { pattern: /@Override/, weight: 4 },
+      { pattern: /\bArrayList</, weight: 4 },
+      { pattern: /\.length\b/, weight: 1 },
+      { pattern: /\bvoid\s+\w+\s*\(/, weight: 2 },
+    ],
+    c: [
+      { pattern: /#include\s*<stdio\.h>/, weight: 5 },
+      { pattern: /#include\s*<stdlib\.h>/, weight: 4 },
+      { pattern: /\bint\s+main\s*\(/, weight: 3 },
+      { pattern: /\bprintf\s*\(/, weight: 4 },
+      { pattern: /\bscanf\s*\(/, weight: 4 },
+      { pattern: /\bmalloc\s*\(/, weight: 4 },
+      { pattern: /\bfree\s*\(/, weight: 3 },
+      { pattern: /\bstruct\s+\w+\s*{/, weight: 2 },
+    ],
+    cpp: [
+      { pattern: /#include\s*<iostream>/, weight: 5 },
+      { pattern: /\bcout\s*<</, weight: 5 },
+      { pattern: /\bcin\s*>>/, weight: 5 },
+      { pattern: /\busing\s+namespace\s+std/, weight: 5 },
+      { pattern: /\bstd::/, weight: 4 },
+      { pattern: /#include\s*<vector>/, weight: 4 },
+      { pattern: /#include\s*<string>/, weight: 3 },
+      { pattern: /\bclass\s+\w+\s*{/, weight: 2 },
+    ],
+    csharp: [
+      { pattern: /\busing\s+System/, weight: 5 },
+      { pattern: /\bnamespace\s+\w+/, weight: 4 },
+      { pattern: /\bConsole\.Write/, weight: 5 },
+      { pattern: /\bpublic\s+class\s+\w+/, weight: 3 },
+      { pattern: /\bstring\[\]\s+args/, weight: 4 },
+      { pattern: /\bvar\s+\w+\s*=/, weight: 1 },
+    ],
+    go: [
+      { pattern: /\bpackage\s+\w+/, weight: 5 },
+      { pattern: /\bfunc\s+\w+/, weight: 3 },
+      { pattern: /\bfmt\.Print/, weight: 5 },
+      { pattern: /\bimport\s+"/, weight: 3 },
+      { pattern: /:=/, weight: 4 },
+      { pattern: /\bgo\s+\w+/, weight: 4 },
+      { pattern: /\bdefer\s+/, weight: 4 },
+    ],
+    rust: [
+      { pattern: /\bfn\s+\w+/, weight: 3 },
+      { pattern: /\blet\s+mut\s+/, weight: 5 },
+      { pattern: /\bprintln!\s*\(/, weight: 5 },
+      { pattern: /\bimpl\s+\w+/, weight: 4 },
+      { pattern: /\b->\s*\w+/, weight: 3 },
+      { pattern: /\buse\s+std::/, weight: 4 },
+      { pattern: /\bOption</, weight: 4 },
+      { pattern: /\bResult</, weight: 4 },
+    ],
+    php: [
+      { pattern: /<\?php/, weight: 6 },
+      { pattern: /\$\w+\s*=/, weight: 3 },
+      { pattern: /\becho\s+/, weight: 3 },
+      { pattern: /\bfunction\s+\w+\s*\(/, weight: 1 },
+      { pattern: /->/, weight: 1 },
+      { pattern: /\$this->/, weight: 3 },
+    ],
+    ruby: [
+      { pattern: /\bdef\s+\w+/, weight: 2 },
+      { pattern: /\bputs\s+/, weight: 4 },
+      { pattern: /\bend\s*$/m, weight: 2 },
+      { pattern: /\brequire\s+['"]/, weight: 3 },
+      { pattern: /\battr_accessor/, weight: 5 },
+      { pattern: /\bdo\s*\|/, weight: 3 },
+    ],
+    swift: [
+      { pattern: /\bvar\s+\w+\s*:/, weight: 3 },
+      { pattern: /\bfunc\s+\w+/, weight: 2 },
+      { pattern: /\bprint\s*\(/, weight: 1 },
+      { pattern: /\blet\s+\w+\s*:/, weight: 3 },
+      { pattern: /\bguard\s+let/, weight: 5 },
+      { pattern: /\bif\s+let/, weight: 4 },
+    ],
+    kotlin: [
+      { pattern: /\bfun\s+\w+/, weight: 3 },
+      { pattern: /\bval\s+\w+/, weight: 3 },
+      { pattern: /\bvar\s+\w+/, weight: 2 },
+      { pattern: /\bprintln\s*\(/, weight: 2 },
+      { pattern: /\bdata\s+class/, weight: 5 },
+      { pattern: /\bobject\s+\w+/, weight: 4 },
+    ],
+    sql: [
+      { pattern: /\bSELECT\s+/i, weight: 3 },
+      { pattern: /\bFROM\s+/i, weight: 2 },
+      { pattern: /\bWHERE\s+/i, weight: 2 },
+      { pattern: /\bINSERT\s+INTO/i, weight: 3 },
+      { pattern: /\bCREATE\s+TABLE/i, weight: 4 },
+      { pattern: /\bJOIN\s+/i, weight: 3 },
+    ],
     auto: [],
   };
 
   let maxScore = 0;
   let detectedLang: ProgrammingLanguage = 'auto';
 
-  for (const [lang, regexes] of Object.entries(patterns)) {
+  for (const [lang, patternList] of Object.entries(patterns)) {
     if (lang === 'auto') continue;
-    const score = regexes.filter(regex => regex.test(code)).length;
+    let score = 0;
+    for (const { pattern, weight } of patternList) {
+      if (pattern.test(code)) {
+        score += weight;
+      }
+    }
     if (score > maxScore) {
       maxScore = score;
       detectedLang = lang as ProgrammingLanguage;
     }
   }
 
-  return detectedLang === 'auto' ? 'python' : detectedLang;
+  return detectedLang === 'auto' ? 'javascript' : detectedLang;
 }
 
 function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
@@ -107,30 +235,96 @@ function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
   };
 }
 
+function cleanCorrectedCode(code: string): string {
+  if (!code) return '';
+  
+  let cleaned = code.trim();
+  
+  // Remove markdown code fences with language identifiers
+  const codeBlockRegex = /^```[\w]*\n?([\s\S]*?)\n?```$/;
+  const match = cleaned.match(codeBlockRegex);
+  if (match) {
+    cleaned = match[1].trim();
+  }
+  
+  // Also handle cases where only opening fence exists
+  if (cleaned.startsWith('```')) {
+    const lines = cleaned.split('\n');
+    // Remove first line if it's a code fence
+    if (lines[0].match(/^```\w*$/)) {
+      lines.shift();
+    }
+    // Remove last line if it's a closing fence
+    if (lines[lines.length - 1] === '```') {
+      lines.pop();
+    }
+    cleaned = lines.join('\n');
+  }
+  
+  return cleaned.trim();
+}
+
 function generateDiff(original: string, corrected: string): DiffLine[] {
-  const originalLines = original.split('\n');
-  const correctedLines = corrected.split('\n');
+  // Clean both codes for comparison
+  const cleanOriginal = original.trim();
+  const cleanCorrected = cleanCorrectedCode(corrected);
+  
+  // If codes are essentially the same, return all as unchanged
+  if (cleanOriginal === cleanCorrected) {
+    return cleanOriginal.split('\n').map((line, i) => ({
+      type: 'unchanged' as const,
+      content: line,
+      lineNumber: i + 1,
+    }));
+  }
+  
+  const originalLines = cleanOriginal.split('\n');
+  const correctedLines = cleanCorrected.split('\n');
   const diff: DiffLine[] = [];
   
+  // Use a simple LCS-based diff approach for better accuracy
   const maxLen = Math.max(originalLines.length, correctedLines.length);
+  let origIndex = 0;
+  let corrIndex = 0;
   
-  for (let i = 0; i < maxLen; i++) {
-    const origLine = originalLines[i] || '';
-    const corrLine = correctedLines[i] || '';
+  while (origIndex < originalLines.length || corrIndex < correctedLines.length) {
+    const origLine = originalLines[origIndex] || '';
+    const corrLine = correctedLines[corrIndex] || '';
     
-    if (i >= originalLines.length) {
-      diff.push({ type: 'added', content: corrLine, lineNumber: i + 1 });
-    } else if (i >= correctedLines.length) {
-      diff.push({ type: 'removed', content: origLine, lineNumber: i + 1 });
-    } else if (origLine !== corrLine) {
-      if (origLine.trim()) {
-        diff.push({ type: 'removed', content: origLine, lineNumber: i + 1 });
-      }
-      if (corrLine.trim()) {
-        diff.push({ type: 'added', content: corrLine, lineNumber: i + 1 });
-      }
+    if (origIndex >= originalLines.length) {
+      // Only corrected lines left - these are additions
+      diff.push({ type: 'added', content: corrLine, lineNumber: corrIndex + 1 });
+      corrIndex++;
+    } else if (corrIndex >= correctedLines.length) {
+      // Only original lines left - these are removals
+      diff.push({ type: 'removed', content: origLine, lineNumber: origIndex + 1 });
+      origIndex++;
+    } else if (origLine.trim() === corrLine.trim()) {
+      // Lines match (ignoring whitespace)
+      diff.push({ type: 'unchanged', content: corrLine, lineNumber: corrIndex + 1 });
+      origIndex++;
+      corrIndex++;
     } else {
-      diff.push({ type: 'unchanged', content: origLine, lineNumber: i + 1 });
+      // Lines differ - check if it's a modification or insertion/deletion
+      // Look ahead to see if the original line appears later in corrected
+      const foundInCorrected = correctedLines.slice(corrIndex + 1, corrIndex + 5).findIndex(l => l.trim() === origLine.trim());
+      const foundInOriginal = originalLines.slice(origIndex + 1, origIndex + 5).findIndex(l => l.trim() === corrLine.trim());
+      
+      if (foundInCorrected >= 0 && (foundInOriginal < 0 || foundInCorrected <= foundInOriginal)) {
+        // Original line appears later - current corrected line is an addition
+        diff.push({ type: 'added', content: corrLine, lineNumber: corrIndex + 1 });
+        corrIndex++;
+      } else if (foundInOriginal >= 0) {
+        // Corrected line appears later - current original line is a removal
+        diff.push({ type: 'removed', content: origLine, lineNumber: origIndex + 1 });
+        origIndex++;
+      } else {
+        // Both lines are different - it's a modification
+        diff.push({ type: 'removed', content: origLine, lineNumber: origIndex + 1 });
+        diff.push({ type: 'added', content: corrLine, lineNumber: corrIndex + 1 });
+        origIndex++;
+        corrIndex++;
+      }
     }
   }
   
@@ -249,7 +443,10 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     }
 
     const codeHealth = calculateCodeHealth(parsedResult.errors || []);
-    const diffView = generateDiff(code, parsedResult.correctedCode || code);
+    
+    // Clean the corrected code to remove markdown formatting
+    const cleanedCorrectedCode = cleanCorrectedCode(parsedResult.correctedCode || code);
+    const diffView = generateDiff(code, cleanedCorrectedCode);
 
     const result: DebugResult = {
       intent: parsedResult.intent || 'Unable to determine intent',
@@ -276,7 +473,7 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
         documentationLinks: parsedResult.resources?.documentationLinks || [],
       },
       codeHealth,
-      correctedCode: parsedResult.correctedCode || code,
+      correctedCode: cleanedCorrectedCode,
       diffView,
       detectedLanguage: detectedLang,
     };

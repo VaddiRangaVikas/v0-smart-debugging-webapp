@@ -64,23 +64,32 @@ export function DiffViewer({ originalCode, correctedCode, diffView }: DiffViewer
     }
   };
 
-  if (!correctedCode || correctedCode === originalCode) {
+  // Check if the code is essentially the same (no real changes needed)
+  const noChangesNeeded = !correctedCode || 
+    correctedCode.trim() === originalCode.trim() ||
+    diffView.every(d => d.type === 'unchanged');
+
+  if (noChangesNeeded) {
     return (
-      <Card className="h-full border-border/50 bg-card/50 backdrop-blur-sm">
+      <Card className="h-full border-green-500/30 bg-green-500/5 backdrop-blur-sm">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-              <GitCompare className="h-3.5 w-3.5 text-primary" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-500/20">
+              <Check className="h-3.5 w-3.5 text-green-400" />
             </div>
-            <span>Code Transformation</span>
+            <span className="text-green-400">Code Transformation</span>
+            <Badge variant="secondary" className="ml-2 bg-green-500/20 text-green-400">
+              No Changes
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="flex h-[200px] flex-col items-center justify-center">
           <div className="relative mb-4 flex h-16 w-16 items-center justify-center">
-            <div className="absolute inset-0 rounded-xl border-2 border-dashed border-border/50" />
-            <Code2 className="h-6 w-6 text-muted-foreground/50" />
+            <div className="absolute inset-0 rounded-xl bg-green-500/10 animate-pulse" />
+            <Check className="h-8 w-8 text-green-400" />
           </div>
-          <p className="text-sm text-muted-foreground">No changes needed or debug first</p>
+          <p className="text-sm font-medium text-green-400">Your code is correct!</p>
+          <p className="mt-1 text-xs text-muted-foreground">No transformations needed</p>
         </CardContent>
       </Card>
     );

@@ -21,6 +21,8 @@ import {
   ExternalLink,
   Zap,
   Sparkles,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -59,9 +61,59 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
     );
   }
 
+  // Check if there are errors
+  const hasErrors = result.error && 
+    !result.error.toLowerCase().includes('no error') && 
+    !result.error.toLowerCase().includes('no issues') &&
+    !result.error.toLowerCase().includes('code is correct') &&
+    !result.error.toLowerCase().includes('looks correct') &&
+    !result.error.toLowerCase().includes('correctly implemented');
+
   return (
     <ScrollArea className="h-full">
       <div className="space-y-4 p-4">
+        {/* Status Banner */}
+        <Card className={cn(
+          'relative overflow-hidden backdrop-blur-sm transition-all',
+          hasErrors 
+            ? 'border-red-500/50 bg-red-500/10 shadow-[0_0_30px_rgba(239,68,68,0.2)]'
+            : 'border-green-500/50 bg-green-500/10 shadow-[0_0_30px_rgba(34,197,94,0.2)]'
+        )}>
+          <div className={cn(
+            'absolute inset-0 opacity-20',
+            hasErrors 
+              ? 'bg-gradient-to-r from-red-500/20 via-transparent to-red-500/20'
+              : 'bg-gradient-to-r from-green-500/20 via-transparent to-green-500/20'
+          )} />
+          <CardContent className="relative flex items-center gap-4 py-4">
+            <div className={cn(
+              'flex h-12 w-12 items-center justify-center rounded-full',
+              hasErrors 
+                ? 'bg-red-500/20 animate-pulse'
+                : 'bg-green-500/20'
+            )}>
+              {hasErrors ? (
+                <XCircle className="h-6 w-6 text-red-400" />
+              ) : (
+                <CheckCircle2 className="h-6 w-6 text-green-400" />
+              )}
+            </div>
+            <div>
+              <h3 className={cn(
+                'text-lg font-bold',
+                hasErrors ? 'text-red-400' : 'text-green-400'
+              )}>
+                {hasErrors ? 'Errors Detected' : 'Code Looks Good!'}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {hasErrors 
+                  ? 'Issues found in your code. See details below.'
+                  : 'No errors found. Your code is working correctly!'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4 bg-secondary/50">
             <TabsTrigger value="overview" className="gap-1.5 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
@@ -113,18 +165,38 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
               </CardContent>
             </Card>
 
-            {/* Error */}
-            <Card className="border-destructive/30 bg-destructive/5 backdrop-blur-sm shadow-[0_0_20px_rgba(239,68,68,0.1)]">
+            {/* Error - Only show prominently if there are errors */}
+            <Card className={cn(
+              'backdrop-blur-sm',
+              hasErrors 
+                ? 'border-red-500/50 bg-red-500/10 shadow-[0_0_20px_rgba(239,68,68,0.2)]'
+                : 'border-green-500/30 bg-green-500/5'
+            )}>
               <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm text-destructive">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-destructive/10 animate-pulse">
-                    <AlertCircle className="h-3.5 w-3.5" />
+                <CardTitle className={cn(
+                  'flex items-center gap-2 text-sm',
+                  hasErrors ? 'text-red-400' : 'text-green-400'
+                )}>
+                  <div className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-md',
+                    hasErrors ? 'bg-red-500/20 animate-pulse' : 'bg-green-500/20'
+                  )}>
+                    {hasErrors ? (
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    )}
                   </div>
-                  <span>Error Detected</span>
+                  <span>{hasErrors ? 'Error Detected' : 'Status'}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="font-mono text-sm leading-relaxed text-destructive">{result.error}</p>
+                <p className={cn(
+                  'font-mono text-sm leading-relaxed',
+                  hasErrors ? 'text-red-400' : 'text-green-400'
+                )}>
+                  {result.error}
+                </p>
               </CardContent>
             </Card>
 
@@ -143,20 +215,22 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
               </CardContent>
             </Card>
 
-            {/* Root Cause */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-purple-500/10">
-                    <Search className="h-3.5 w-3.5 text-purple-400" />
-                  </div>
-                  <span>Root Cause</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-relaxed text-muted-foreground">{result.rootCause}</p>
-              </CardContent>
-            </Card>
+            {/* Root Cause - Only show if there are errors */}
+            {hasErrors && (
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-purple-500/10">
+                      <Search className="h-3.5 w-3.5 text-purple-400" />
+                    </div>
+                    <span>Root Cause</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{result.rootCause}</p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Mental Model */}
             {result.mentalModel && (
@@ -315,17 +389,22 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
 
           <TabsContent value="resources" className="mt-4 space-y-4">
             {/* YouTube Links */}
-            {result.resources.youtubeLinks.length > 0 && (
-              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10">
-                      <Youtube className="h-3.5 w-3.5 text-red-400" />
-                    </div>
-                    <span>YouTube Resources</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+            <Card className="border-red-500/30 bg-card/50 backdrop-blur-sm transition-all hover:border-red-500/50 hover:shadow-[0_0_20px_rgba(239,68,68,0.1)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10">
+                    <Youtube className="h-3.5 w-3.5 text-red-400" />
+                  </div>
+                  <span>YouTube Tutorials</span>
+                  {result.resources.youtubeLinks.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-red-500/20 text-red-400">
+                      {result.resources.youtubeLinks.length} videos
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {result.resources.youtubeLinks.length > 0 ? (
                   <ul className="space-y-2">
                     {result.resources.youtubeLinks.map((link, i) => (
                       <li key={i}>
@@ -333,30 +412,41 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
                           href={link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary transition-all hover:bg-primary/10"
+                          className="flex items-center gap-3 rounded-lg border border-border/50 bg-secondary/30 px-4 py-3 text-sm transition-all hover:border-red-500/50 hover:bg-red-500/10"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          <span className="truncate">{link}</span>
+                          <Youtube className="h-5 w-5 shrink-0 text-red-400" />
+                          <span className="flex-1 truncate text-foreground">{link}</span>
+                          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
                         </a>
                       </li>
                     ))}
                   </ul>
-                </CardContent>
-              </Card>
-            )}
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                    <Youtube className="h-8 w-8 opacity-30" />
+                    <p className="mt-2 text-sm">No YouTube resources available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Documentation Links */}
-            {result.resources.documentationLinks.length > 0 && (
-              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500/10">
-                      <FileText className="h-3.5 w-3.5 text-blue-400" />
-                    </div>
-                    <span>Documentation</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+            <Card className="border-blue-500/30 bg-card/50 backdrop-blur-sm transition-all hover:border-blue-500/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500/10">
+                    <FileText className="h-3.5 w-3.5 text-blue-400" />
+                  </div>
+                  <span>Official Documentation</span>
+                  {result.resources.documentationLinks.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-blue-500/20 text-blue-400">
+                      {result.resources.documentationLinks.length} docs
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {result.resources.documentationLinks.length > 0 ? (
                   <ul className="space-y-2">
                     {result.resources.documentationLinks.map((link, i) => (
                       <li key={i}>
@@ -364,24 +454,69 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
                           href={link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary transition-all hover:bg-primary/10"
+                          className="flex items-center gap-3 rounded-lg border border-border/50 bg-secondary/30 px-4 py-3 text-sm transition-all hover:border-blue-500/50 hover:bg-blue-500/10"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          <span className="truncate">{link}</span>
+                          <FileText className="h-5 w-5 shrink-0 text-blue-400" />
+                          <span className="flex-1 truncate text-foreground">{link}</span>
+                          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
                         </a>
                       </li>
                     ))}
                   </ul>
-                </CardContent>
-              </Card>
-            )}
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                    <FileText className="h-8 w-8 opacity-30" />
+                    <p className="mt-2 text-sm">No documentation links available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            {result.resources.youtubeLinks.length === 0 && result.resources.documentationLinks.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <FileText className="h-12 w-12 opacity-30" />
-                <p className="mt-4 text-sm">No additional resources available</p>
-              </div>
-            )}
+            {/* Quick Help */}
+            <Card className="border-primary/30 bg-primary/5 backdrop-blur-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <span>Quick Search</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Search for more resources about this error:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(result.error + ' ' + result.detectedLanguage)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-xs font-medium transition-all hover:bg-primary hover:text-primary-foreground"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    Google
+                  </a>
+                  <a
+                    href={`https://stackoverflow.com/search?q=${encodeURIComponent(result.error)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-xs font-medium transition-all hover:bg-orange-500 hover:text-white"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Stack Overflow
+                  </a>
+                  <a
+                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(result.error + ' ' + result.detectedLanguage + ' tutorial')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-xs font-medium transition-all hover:bg-red-500 hover:text-white"
+                  >
+                    <Youtube className="h-3.5 w-3.5" />
+                    YouTube
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

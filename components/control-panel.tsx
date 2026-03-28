@@ -42,10 +42,26 @@ const LANGUAGES: { value: ProgrammingLanguage; label: string }[] = [
   { value: 'sql', label: 'SQL' },
 ];
 
-const EXPLANATION_LANGUAGES: { value: ExplanationLanguage; label: string }[] = [
-  { value: 'english', label: 'English' },
-  { value: 'hindi', label: 'Hindi' },
-  { value: 'tamil', label: 'Tamil' },
+const EXPLANATION_LANGUAGES: { value: ExplanationLanguage; label: string; flag: string }[] = [
+  { value: 'english', label: 'English', flag: '🇺🇸' },
+  { value: 'hindi', label: 'Hindi', flag: '🇮🇳' },
+  { value: 'telugu', label: 'Telugu', flag: '🇮🇳' },
+  { value: 'tamil', label: 'Tamil', flag: '🇮🇳' },
+  { value: 'kannada', label: 'Kannada', flag: '🇮🇳' },
+  { value: 'malayalam', label: 'Malayalam', flag: '🇮🇳' },
+  { value: 'marathi', label: 'Marathi', flag: '🇮🇳' },
+  { value: 'bengali', label: 'Bengali', flag: '🇮🇳' },
+  { value: 'gujarati', label: 'Gujarati', flag: '🇮🇳' },
+  { value: 'punjabi', label: 'Punjabi', flag: '🇮🇳' },
+  { value: 'spanish', label: 'Spanish', flag: '🇪🇸' },
+  { value: 'french', label: 'French', flag: '🇫🇷' },
+  { value: 'german', label: 'German', flag: '🇩🇪' },
+  { value: 'chinese', label: 'Chinese', flag: '🇨🇳' },
+  { value: 'japanese', label: 'Japanese', flag: '🇯🇵' },
+  { value: 'korean', label: 'Korean', flag: '🇰🇷' },
+  { value: 'arabic', label: 'Arabic', flag: '🇸🇦' },
+  { value: 'portuguese', label: 'Portuguese', flag: '🇵🇹' },
+  { value: 'russian', label: 'Russian', flag: '🇷🇺' },
 ];
 
 const USER_LEVELS: { value: UserLevel; label: string; description: string }[] = [
@@ -110,13 +126,16 @@ export function ControlPanel({
           <Globe className="h-3.5 w-3.5 text-green-400" />
         </div>
         <Select value={explanationLanguage} onValueChange={onExplanationLanguageChange}>
-          <SelectTrigger className="h-8 w-[100px] border-border/50 bg-secondary/50 text-xs hover:border-primary/50">
+          <SelectTrigger className="h-8 w-[130px] border-border/50 bg-secondary/50 text-xs hover:border-primary/50">
             <SelectValue placeholder="Response" />
           </SelectTrigger>
-          <SelectContent className="border-border/50 bg-card/95 backdrop-blur-sm">
+          <SelectContent className="max-h-[300px] border-border/50 bg-card/95 backdrop-blur-sm">
             {EXPLANATION_LANGUAGES.map((lang) => (
               <SelectItem key={lang.value} value={lang.value} className="text-xs">
-                {lang.label}
+                <div className="flex items-center gap-2">
+                  <span>{lang.flag}</span>
+                  <span>{lang.label}</span>
+                </div>
               </SelectItem>
             ))}
           </SelectContent>
