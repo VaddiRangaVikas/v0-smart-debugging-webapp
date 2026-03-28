@@ -20,30 +20,38 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
   ];
 
   useEffect(() => {
+    let mounted = true;
+    
     const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 2;
-      });
+      if (mounted) {
+        setProgress((prev) => {
+          if (prev >= 100) {
+            return 100;
+          }
+          return prev + 2;
+        });
+      }
     }, duration / 50);
 
     const textInterval = setInterval(() => {
-      setCurrentText((prev) => (prev + 1) % loadingTexts.length);
+      if (mounted) {
+        setCurrentText((prev) => (prev + 1) % loadingTexts.length);
+      }
     }, duration / 4);
 
     const completeTimer = setTimeout(() => {
-      onComplete();
+      if (mounted) {
+        onComplete();
+      }
     }, duration);
 
     return () => {
+      mounted = false;
       clearInterval(progressInterval);
       clearInterval(textInterval);
       clearTimeout(completeTimer);
     };
-  }, [duration, onComplete]);
+  }, [duration, onComplete, loadingTexts.length]);
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background overflow-hidden">
