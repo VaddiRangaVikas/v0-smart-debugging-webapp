@@ -14,9 +14,10 @@ interface DiffViewerProps {
   originalCode: string;
   correctedCode: string;
   diffView: DiffLine[];
+  hasResult: boolean; // Whether debugging has been run
 }
 
-export function DiffViewer({ originalCode, correctedCode, diffView }: DiffViewerProps) {
+export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<'diff' | 'clean'>('diff');
 
@@ -64,6 +65,30 @@ export function DiffViewer({ originalCode, correctedCode, diffView }: DiffViewer
     }
   };
 
+  // Show waiting state if no result yet (before debugging)
+  if (!hasResult) {
+    return (
+      <Card className="h-full border-border/50 bg-card/50 backdrop-blur-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted/50">
+              <GitCompare className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <span className="text-muted-foreground">Code Transformation</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex h-[250px] flex-col items-center justify-center">
+          <div className="relative mb-4 flex h-16 w-16 items-center justify-center">
+            <div className="absolute inset-0 rounded-xl border-2 border-dashed border-border/50" />
+            <Code2 className="h-6 w-6 text-muted-foreground/50" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Waiting for Analysis</p>
+          <p className="mt-1 text-xs text-muted-foreground/70">Run debugging to see code transformations</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Check if the code is essentially the same (no real changes needed)
   const noChangesNeeded = !correctedCode || 
     correctedCode.trim() === originalCode.trim() ||
@@ -83,7 +108,7 @@ export function DiffViewer({ originalCode, correctedCode, diffView }: DiffViewer
             </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex h-[200px] flex-col items-center justify-center">
+        <CardContent className="flex h-[250px] flex-col items-center justify-center">
           <div className="relative mb-4 flex h-16 w-16 items-center justify-center">
             <div className="absolute inset-0 rounded-xl bg-green-500/10 animate-pulse" />
             <Check className="h-8 w-8 text-green-400" />

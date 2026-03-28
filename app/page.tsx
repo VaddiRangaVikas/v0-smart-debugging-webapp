@@ -136,71 +136,76 @@ export default function DebugAssistant() {
 
       {/* Main Content */}
       <main className="container relative flex-1 px-4 py-6">
-        <div className="grid h-full gap-6 lg:grid-cols-2">
-          {/* Left Column - Code Input */}
-          <div className="flex flex-col gap-4">
-            <div className="group relative flex-1 overflow-hidden rounded-2xl border border-border/50 bg-card/80 p-4 shadow-xl backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
-              {/* Scan line effect */}
-              <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100">
-                <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-neon-cyan/50 to-transparent animate-[scan-line_3s_ease-in-out_infinite]" />
+        <div className="flex flex-col gap-6">
+          {/* Top Row - Code Input and Code Transformation side by side */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Left - Code Input */}
+            <div className="flex flex-col gap-4">
+              <div className="group relative h-[350px] overflow-hidden rounded-2xl border border-border/50 bg-card/80 p-4 shadow-xl backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
+                {/* Scan line effect */}
+                <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-neon-cyan/50 to-transparent animate-[scan-line_3s_ease-in-out_infinite]" />
+                </div>
+                
+                <CodeEditor
+                  value={code}
+                  onChange={setCode}
+                  onSubmit={handleDebug}
+                  isLoading={isLoading}
+                  placeholder="Paste your code here, or drag and drop files..."
+                />
               </div>
-              
-              <CodeEditor
-                value={code}
-                onChange={setCode}
-                onSubmit={handleDebug}
-                isLoading={isLoading}
-                placeholder="Paste your code here, or drag and drop files..."
-              />
-            </div>
 
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={handleDebug}
-                disabled={isLoading || !code.trim()}
-                className="relative flex-1 gap-2 overflow-hidden bg-primary text-primary-foreground transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,255,255,0.4)]"
-                size="lg"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Analyzing Code...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4" />
-                    <span>Debug Code</span>
-                  </>
-                )}
-                <div className="absolute inset-0 animate-shimmer" />
-              </Button>
-            </div>
-
-            {error && (
-              <div className="animate-pulse rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_0_15px_rgba(255,0,0,0.2)]">
-                {error}
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleDebug}
+                  disabled={isLoading || !code.trim()}
+                  className="relative flex-1 gap-2 overflow-hidden bg-primary text-primary-foreground transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,255,255,0.4)]"
+                  size="lg"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Analyzing Code...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4" />
+                      <span>Debug Code</span>
+                    </>
+                  )}
+                  <div className="absolute inset-0 animate-shimmer" />
+                </Button>
               </div>
-            )}
 
-            {/* Code Health */}
-            <div className="h-[320px]">
-              <CodeHealth health={result?.codeHealth ?? null} />
-            </div>
-          </div>
-
-          {/* Right Column - Debug Output */}
-          <div className="flex flex-col gap-4">
-            <div className="group relative flex-1 overflow-hidden rounded-2xl border border-border/50 bg-card/80 shadow-xl backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
-              <DebugOutput result={result} learningMode={learningMode} />
+              {error && (
+                <div className="animate-pulse rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_0_15px_rgba(255,0,0,0.2)]">
+                  {error}
+                </div>
+              )}
             </div>
 
-            {/* Diff Viewer */}
-            <div className="h-[350px]">
+            {/* Right - Code Transformation */}
+            <div className="h-[420px]">
               <DiffViewer
                 originalCode={code}
                 correctedCode={result?.correctedCode ?? ''}
                 diffView={result?.diffView ?? []}
+                hasResult={result !== null}
               />
+            </div>
+          </div>
+
+          {/* Bottom Row - Debug Output and Code Health */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Left - Debug Output */}
+            <div className="group relative min-h-[400px] overflow-hidden rounded-2xl border border-border/50 bg-card/80 shadow-xl backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
+              <DebugOutput result={result} learningMode={learningMode} />
+            </div>
+
+            {/* Right - Code Health */}
+            <div className="h-[400px]">
+              <CodeHealth health={result?.codeHealth ?? null} />
             </div>
           </div>
         </div>
