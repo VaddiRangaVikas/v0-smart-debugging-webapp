@@ -222,16 +222,41 @@ function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
     }
   }
 
-  score = Math.max(0, score);
-  const total = errorCount + warningCount + optimizationCount + 1;
-  const correct = Math.round((score / 100) * 100);
+  score = Math.max(0, Math.min(100, score));
+  
+  // Calculate percentages that add up to exactly 100%
+  const totalIssues = errorCount + warningCount + optimizationCount;
+  
+  if (totalIssues === 0) {
+    // No issues - 100% correct
+    return {
+      score: 100,
+      correct: 100,
+      errors: 0,
+      warnings: 0,
+      optimizations: 0,
+    };
+  }
 
+  // Calculate the "correct" portion based on score
+  const correctPortion = score;
+  const issuesPortion = 100 - score;
+  
+  // Distribute the issues portion among error types proportionally
+  const errorPercent = totalIssues > 0 ? Math.round((errorCount / totalIssues) * issuesPortion) : 0;
+  const warningPercent = totalIssues > 0 ? Math.round((warningCount / totalIssues) * issuesPortion) : 0;
+  const optimizationPercent = totalIssues > 0 ? Math.round((optimizationCount / totalIssues) * issuesPortion) : 0;
+  
+  // Adjust for rounding errors to ensure total is exactly 100%
+  const total = correctPortion + errorPercent + warningPercent + optimizationPercent;
+  const adjustment = 100 - total;
+  
   return {
     score,
-    correct,
-    errors: Math.round((errorCount / total) * 100),
-    warnings: Math.round((warningCount / total) * 100),
-    optimizations: Math.round((optimizationCount / total) * 100),
+    correct: correctPortion + adjustment, // Add any rounding adjustment to correct
+    errors: errorPercent,
+    warnings: warningPercent,
+    optimizations: optimizationPercent,
   };
 }
 

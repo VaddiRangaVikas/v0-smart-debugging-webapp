@@ -40,11 +40,20 @@ export function CodeHealth({ health }: CodeHealthProps) {
     );
   }
 
+  // Ensure percentages add up to 100%
+  const totalPercent = health.correct + health.errors + health.warnings + health.optimizations;
+  const normalizedData = totalPercent > 0 ? {
+    correct: Math.round((health.correct / totalPercent) * 100),
+    errors: Math.round((health.errors / totalPercent) * 100),
+    warnings: Math.round((health.warnings / totalPercent) * 100),
+    optimizations: Math.round((health.optimizations / totalPercent) * 100),
+  } : { correct: 100, errors: 0, warnings: 0, optimizations: 0 };
+
   const data = [
-    { name: 'Correct', value: health.correct, color: COLORS.correct, icon: CheckCircle2 },
-    { name: 'Errors', value: health.errors, color: COLORS.errors, icon: XCircle },
-    { name: 'Warnings', value: health.warnings, color: COLORS.warnings, icon: AlertTriangle },
-    { name: 'Optimizations', value: health.optimizations, color: COLORS.optimizations, icon: Sparkles },
+    { name: 'Correct', value: normalizedData.correct, color: COLORS.correct, icon: CheckCircle2 },
+    { name: 'Errors', value: normalizedData.errors, color: COLORS.errors, icon: XCircle },
+    { name: 'Warnings', value: normalizedData.warnings, color: COLORS.warnings, icon: AlertTriangle },
+    { name: 'Optimizations', value: normalizedData.optimizations, color: COLORS.optimizations, icon: Sparkles },
   ].filter((d) => d.value > 0);
 
   const getScoreColor = (score: number) => {

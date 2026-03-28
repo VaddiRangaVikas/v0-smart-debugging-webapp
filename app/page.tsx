@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Bug, Loader2, Zap, Terminal, Cpu, Activity, Sparkles, CircuitBoard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CodeEditor } from '@/components/code-editor';
@@ -8,6 +8,8 @@ import { DebugOutput } from '@/components/debug-output';
 import { CodeHealth } from '@/components/code-health';
 import { DiffViewer } from '@/components/diff-viewer';
 import { ControlPanel } from '@/components/control-panel';
+import { DebugHistory, type HistoryItem } from '@/components/debug-history';
+import { Analytics } from '@/components/analytics';
 import type {
   ProgrammingLanguage,
   ExplanationLanguage,
@@ -25,6 +27,60 @@ export default function DebugAssistant() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<DebugResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('debugHistory');
+    if (savedHistory) {
+      try {
+        const parsed = JSON.parse(savedHistory);
+        // Convert timestamp strings back to Date objects
+        const historyWithDates = parsed.map((item: HistoryItem) => ({
+          ...item,
+          timestamp: new Date(item.timestamp),
+        }));
+        setHistory(historyWithDates);
+      } catch (e) {
+        console.error('Failed to load history:', e);
+      }
+    }
+  }, []);
+
+  // Save history to localStorage when it changes
+  useEffect(() => {
+    if (history.length > 0) {
+      localStorage.setItem('debugHistory', JSON.stringify(history));
+    }
+  }, [history]);
+
+  const addToHistory = useCallback((debugResult: DebugResult) => {
+    const newItem: HistoryItem = {
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      code,
+      language: debugResult.detectedLanguage || language,
+      result: debugResult,
+    };
+    setHistory(prev => [newItem, ...prev].slice(0, 50)); // Keep last 50 items
+  }, [code, language]);
+
+  const handleSelectHistoryItem = useCallback((item: HistoryItem) => {
+    setCode(item.code);
+    setResult(item.result);
+    if (item.language !== 'auto') {
+      setLanguage(item.language as ProgrammingLanguage);
+    }
+  }, []);
+
+  const handleClearHistory = useCallback(() => {
+    setHistory([]);
+    localStorage.removeItem('debugHistory');
+  }, []);
+
+  const handleDeleteHistoryItem = useCallback((id: string) => {
+    setHistory(prev => prev.filter(item => item.id !== id));
+  }, []);
 
   const handleDebug = useCallback(async () => {
     if (!code.trim()) {
@@ -59,6 +115,7 @@ export default function DebugAssistant() {
       }
 
       setResult(data);
+      addToHistory(data);
     } catch (err) {
       console.error('Debug error:', err);
       setError('Failed to connect to the AI service. Please check your connection and try again.');
@@ -96,17 +153,26 @@ export default function DebugAssistant() {
             </div>
           </div>
 
-          <ControlPanel
-            language={language}
-            explanationLanguage={explanationLanguage}
-            userLevel={userLevel}
-            learningMode={learningMode}
-            detectedLanguage={result?.detectedLanguage}
-            onLanguageChange={setLanguage}
-            onExplanationLanguageChange={setExplanationLanguage}
-            onUserLevelChange={setUserLevel}
-            onLearningModeChange={setLearningMode}
-          />
+          <div className="flex items-center gap-3">
+            <DebugHistory
+              history={history}
+              onSelectItem={handleSelectHistoryItem}
+              onClearHistory={handleClearHistory}
+              onDeleteItem={handleDeleteHistoryItem}
+            />
+            <Analytics history={history} />
+            <ControlPanel
+              language={language}
+              explanationLanguage={explanationLanguage}
+              userLevel={userLevel}
+              learningMode={learningMode}
+              detectedLanguage={result?.detectedLanguage}
+              onLanguageChange={setLanguage}
+              onExplanationLanguageChange={setExplanationLanguage}
+              onUserLevelChange={setUserLevel}
+              onLearningModeChange={setLearningMode}
+            />
+          </div>
         </div>
       </header>
 
