@@ -208,6 +208,17 @@
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes text-glow {
   0%, 100% {
     text-shadow: 0 0 5px var(--neon-cyan), 0 0 10px var(--neon-cyan);

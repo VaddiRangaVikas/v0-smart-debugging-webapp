@@ -10,6 +10,7 @@ import { DiffViewer } from '@/components/diff-viewer';
 import { ControlPanel } from '@/components/control-panel';
 import { DebugHistory, type HistoryItem } from '@/components/debug-history';
 import { Analytics } from '@/components/analytics';
+import { SplashScreen } from '@/components/splash-screen';
 import type {
   ProgrammingLanguage,
   ExplanationLanguage,
@@ -19,6 +20,7 @@ import type {
 } from '@/lib/types';
 
 export default function DebugAssistant() {
+  const [showSplash, setShowSplash] = useState(true);
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState<ProgrammingLanguage>('auto');
   const [explanationLanguage, setExplanationLanguage] = useState<ExplanationLanguage>('english');
@@ -123,6 +125,10 @@ export default function DebugAssistant() {
       setIsLoading(false);
     }
   }, [code, language, explanationLanguage, userLevel, learningMode]);
+
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} duration={2500} />;
+  }
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-background">

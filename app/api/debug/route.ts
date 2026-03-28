@@ -405,7 +405,30 @@ Please provide your response in the following JSON format (respond ONLY with val
   "correctedCode": "The fixed version of the code"
 }
 
-${explanationLanguage !== 'english' ? `IMPORTANT: Provide all text explanations in ${explanationLanguage}. Keep code and technical terms in English.` : ''}
+${explanationLanguage !== 'english' ? `
+CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
+- "intent" field - write in ${explanationLanguage}
+- "actualBehavior" field - write in ${explanationLanguage}
+- "error" field - write in ${explanationLanguage}
+- "explanation" field - write in ${explanationLanguage}
+- "rootCause" field - write in ${explanationLanguage}
+- All "learning" fields - write in ${explanationLanguage}
+- "mentalModel" field - write in ${explanationLanguage}
+- "teacherMode" field - write in ${explanationLanguage}
+- "thinkMode" field - write in ${explanationLanguage}
+- "conceptBuilder" field - write in ${explanationLanguage}
+- "debugTrace" field - write in ${explanationLanguage}
+- "interviewMode" field - write in ${explanationLanguage}
+- "challengeMode" field - write in ${explanationLanguage}
+- "generalization" field - write in ${explanationLanguage}
+
+ONLY keep the following in English:
+- Code snippets and correctedCode
+- Programming keywords and function names
+- Variable names in examples
+
+The user selected ${explanationLanguage} as their preferred language. Please respect this choice.
+` : ''}
 
 Respond with ONLY the JSON object, no additional text or markdown formatting.`;
 
