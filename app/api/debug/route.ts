@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
-// DeepSeek API configuration
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'sk-6fd30804c0234bae949225b35caa56a0';
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+// Google Gemini API configuration (FREE tier: 15 RPM, 1500 RPD)
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyAONj3Xu73BQCAFVQAJNfduS7zE28qBKxA';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
-// Call DeepSeek API with retry logic
-async function callDeepSeekAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
+// Call Google Gemini API with retry logic
+async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
   const maxRetries = 3;
   let lastError: Error | null = null;
 
@@ -15,22 +15,33 @@ async function callDeepSeekAPI(prompt: string, maxTokens: number = 4096): Promis
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
-      const response = await fetch(DEEPSEEK_API_URL, {
+      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
+          contents: [
             {
-              role: 'user',
-              content: prompt,
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
             },
           ],
-          max_tokens: maxTokens,
-          temperature: 0.7,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: maxTokens,
+            topP: 0.95,
+            topK: 40,
+          },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          ],
         }),
         signal: controller.signal,
       });
@@ -39,23 +50,28 @@ async function callDeepSeekAPI(prompt: string, maxTokens: number = 4096): Promis
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('DeepSeek API error:', response.status, errorData);
+        console.error('Gemini API error:', response.status, errorData);
         
-        if (response.status === 401) {
-          throw new Error('Invalid API key');
+        if (response.status === 400) {
+          throw new Error('Invalid request to Gemini API');
+        }
+        if (response.status === 403) {
+          throw new Error('Invalid Gemini API key');
         }
         if (response.status === 429) {
           // Rate limited, wait and retry
           if (attempt < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 2000));
+            const waitTime = (attempt + 1) * 5000; // Longer wait for rate limits
+            console.log(`Rate limited, waiting ${waitTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
             continue;
           }
-          throw new Error('Rate limited');
+          throw new Error('Rate limited - please wait a moment and try again');
         }
         if (response.status >= 500) {
           // Server error, retry
           if (attempt < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
+            await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 2000));
             continue;
           }
         }
@@ -63,9 +79,10 @@ async function callDeepSeekAPI(prompt: string, maxTokens: number = 4096): Promis
       }
 
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
+      const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
       if (!content) {
+        console.error('Empty response from Gemini:', JSON.stringify(data));
         throw new Error('Empty response from AI');
       }
       
@@ -73,7 +90,7 @@ async function callDeepSeekAPI(prompt: string, maxTokens: number = 4096): Promis
     } catch (error) {
       lastError = error as Error;
       if ((error as Error).name === 'AbortError') {
-        throw new Error('Request timeout');
+        throw new Error('Request timeout - please try with smaller code');
       }
       if (attempt < maxRetries - 1) {
         await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
@@ -515,8 +532,8 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
     const additionalTokens = Math.min(Math.floor(codeLength / 200) * 500, 4000);
     const maxTokens = baseTokens + additionalTokens;
 
-    // Use DeepSeek API
-    const responseText = await callDeepSeekAPI(prompt, maxTokens);
+    // Use Google Gemini API (FREE tier)
+    const responseText = await callGeminiAPI(prompt, maxTokens);
 
     if (!responseText) {
       return NextResponse.json(
@@ -620,10 +637,17 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
-    if (errorMessage.includes('Invalid API key')) {
+    if (errorMessage.includes('Invalid') && errorMessage.includes('API')) {
       return NextResponse.json(
-        { error: 'API configuration error. Please contact support.' },
+        { error: 'API configuration error. Please try again or contact support.' },
         { status: 401 }
+      );
+    }
+    
+    if (errorMessage.includes('Rate limited')) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait a moment and try again.' },
+        { status: 429 }
       );
     }
     
