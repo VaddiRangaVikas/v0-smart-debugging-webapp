@@ -1,64 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateText } from 'ai';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
-
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-// Timeout helper for fetch requests
-function fetchWithTimeout(url: string, options: RequestInit, timeout = 60000): Promise<Response> {
-  return Promise.race([
-    fetch(url, options),
-    new Promise<Response>((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout - the code analysis is taking too long. Please try with smaller code.')), timeout)
-    ),
-  ]);
-}
-
-async function callOpenRouterWithRetry(body: object, retries = 5): Promise<Response> {
-  let lastError: Error | null = null;
-  
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetchWithTimeout(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://smart-debugger.vercel.app',
-          'X-Title': 'AI Debug Assistant',
-        },
-        body: JSON.stringify(body),
-      }, 90000); // 90 second timeout
-      
-      if (response.ok) return response;
-      
-      // Handle rate limiting with exponential backoff
-      if (response.status === 429 && i < retries - 1) {
-        const waitTime = Math.min((i + 1) * 3000, 15000); // 3s, 6s, 9s, 12s, 15s max
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-      
-      // Handle server errors with retry
-      if (response.status >= 500 && i < retries - 1) {
-        const waitTime = (i + 1) * 2000;
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-      
-      return response;
-    } catch (error) {
-      lastError = error as Error;
-      if (i < retries - 1) {
-        const waitTime = (i + 1) * 2000;
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-    }
-  }
-  
-  throw lastError || new Error('Max retries exceeded');
-}
 
 function detectLanguage(code: string): ProgrammingLanguage {
   // Enhanced patterns with weights for better detection
@@ -255,11 +197,9 @@ function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
 
   score = Math.max(0, Math.min(100, score));
   
-  // Calculate percentages that add up to exactly 100%
   const totalIssues = errorCount + warningCount + optimizationCount;
   
   if (totalIssues === 0) {
-    // No issues - 100% correct
     return {
       score: 100,
       correct: 100,
@@ -269,22 +209,19 @@ function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
     };
   }
 
-  // Calculate the "correct" portion based on score
   const correctPortion = score;
   const issuesPortion = 100 - score;
   
-  // Distribute the issues portion among error types proportionally
   const errorPercent = totalIssues > 0 ? Math.round((errorCount / totalIssues) * issuesPortion) : 0;
   const warningPercent = totalIssues > 0 ? Math.round((warningCount / totalIssues) * issuesPortion) : 0;
   const optimizationPercent = totalIssues > 0 ? Math.round((optimizationCount / totalIssues) * issuesPortion) : 0;
   
-  // Adjust for rounding errors to ensure total is exactly 100%
   const total = correctPortion + errorPercent + warningPercent + optimizationPercent;
   const adjustment = 100 - total;
   
   return {
     score,
-    correct: correctPortion + adjustment, // Add any rounding adjustment to correct
+    correct: correctPortion + adjustment,
     errors: errorPercent,
     warnings: warningPercent,
     optimizations: optimizationPercent,
@@ -296,21 +233,17 @@ function cleanCorrectedCode(code: string): string {
   
   let cleaned = code.trim();
   
-  // Remove markdown code fences with language identifiers
   const codeBlockRegex = /^```[\w]*\n?([\s\S]*?)\n?```$/;
   const match = cleaned.match(codeBlockRegex);
   if (match) {
     cleaned = match[1].trim();
   }
   
-  // Also handle cases where only opening fence exists
   if (cleaned.startsWith('```')) {
     const lines = cleaned.split('\n');
-    // Remove first line if it's a code fence
     if (lines[0].match(/^```\w*$/)) {
       lines.shift();
     }
-    // Remove last line if it's a closing fence
     if (lines[lines.length - 1] === '```') {
       lines.pop();
     }
@@ -329,19 +262,16 @@ function validateYoutubeLinks(links: string[]): string[] {
   
   for (const link of links) {
     if (typeof link !== 'string') continue;
-    
-    // Skip placeholder text
     if (link.includes('IMPORTANT:') || link.includes('VIDEO_ID') || link.includes('Provide')) continue;
     
     const match = link.match(youtubeRegex);
     if (match) {
-      // Normalize to standard YouTube URL format
       const videoId = match[4];
       validLinks.push(`https://www.youtube.com/watch?v=${videoId}`);
     }
   }
   
-  return validLinks.slice(0, 5); // Max 5 links
+  return validLinks.slice(0, 5);
 }
 
 // Validate documentation links
@@ -372,7 +302,6 @@ function validateDocLinks(links: string[], language: ProgrammingLanguage): strin
     
     try {
       const url = new URL(link.startsWith('http') ? link : `https://${link}`);
-      // Check if it's a valid documentation domain
       const isValidDomain = docDomains[language]?.some(domain => url.hostname.includes(domain)) ||
                            url.hostname.includes('developer.') ||
                            url.hostname.includes('docs.') ||
@@ -386,15 +315,13 @@ function validateDocLinks(links: string[], language: ProgrammingLanguage): strin
     }
   }
   
-  return validLinks.slice(0, 4); // Max 4 links
+  return validLinks.slice(0, 4);
 }
 
 function generateDiff(original: string, corrected: string): DiffLine[] {
-  // Clean both codes for comparison
   const cleanOriginal = original.trim();
   const cleanCorrected = cleanCorrectedCode(corrected);
   
-  // If codes are essentially the same, return all as unchanged
   if (cleanOriginal === cleanCorrected) {
     return cleanOriginal.split('\n').map((line, i) => ({
       type: 'unchanged' as const,
@@ -407,8 +334,6 @@ function generateDiff(original: string, corrected: string): DiffLine[] {
   const correctedLines = cleanCorrected.split('\n');
   const diff: DiffLine[] = [];
   
-  // Use a simple LCS-based diff approach for better accuracy
-  const maxLen = Math.max(originalLines.length, correctedLines.length);
   let origIndex = 0;
   let corrIndex = 0;
   
@@ -417,34 +342,26 @@ function generateDiff(original: string, corrected: string): DiffLine[] {
     const corrLine = correctedLines[corrIndex] || '';
     
     if (origIndex >= originalLines.length) {
-      // Only corrected lines left - these are additions
       diff.push({ type: 'added', content: corrLine, lineNumber: corrIndex + 1 });
       corrIndex++;
     } else if (corrIndex >= correctedLines.length) {
-      // Only original lines left - these are removals
       diff.push({ type: 'removed', content: origLine, lineNumber: origIndex + 1 });
       origIndex++;
     } else if (origLine.trim() === corrLine.trim()) {
-      // Lines match (ignoring whitespace)
       diff.push({ type: 'unchanged', content: corrLine, lineNumber: corrIndex + 1 });
       origIndex++;
       corrIndex++;
     } else {
-      // Lines differ - check if it's a modification or insertion/deletion
-      // Look ahead to see if the original line appears later in corrected
       const foundInCorrected = correctedLines.slice(corrIndex + 1, corrIndex + 5).findIndex(l => l.trim() === origLine.trim());
       const foundInOriginal = originalLines.slice(origIndex + 1, origIndex + 5).findIndex(l => l.trim() === corrLine.trim());
       
       if (foundInCorrected >= 0 && (foundInOriginal < 0 || foundInCorrected <= foundInOriginal)) {
-        // Original line appears later - current corrected line is an addition
         diff.push({ type: 'added', content: corrLine, lineNumber: corrIndex + 1 });
         corrIndex++;
       } else if (foundInOriginal >= 0) {
-        // Corrected line appears later - current original line is a removal
         diff.push({ type: 'removed', content: origLine, lineNumber: origIndex + 1 });
         origIndex++;
       } else {
-        // Both lines are different - it's a modification
         diff.push({ type: 'removed', content: origLine, lineNumber: origIndex + 1 });
         diff.push({ type: 'added', content: corrLine, lineNumber: corrIndex + 1 });
         origIndex++;
@@ -460,6 +377,13 @@ export async function POST(request: NextRequest) {
   try {
     const body: DebugRequest = await request.json();
     const { code, language, explanationLanguage, userLevel, learningMode } = body;
+
+    if (!code || code.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Please provide code to debug.' },
+        { status: 400 }
+      );
+    }
 
     const detectedLang = language === 'auto' ? detectLanguage(code) : language;
 
@@ -503,153 +427,102 @@ Please provide your response in the following JSON format (respond ONLY with val
   "generalization": "How this error pattern applies to other programming scenarios and languages",
   "resources": {
     "youtubeLinks": [
-      "IMPORTANT: Provide 2-4 REAL, WORKING YouTube video URLs that teach the specific concept related to this error. Use videos from popular programming channels like: freeCodeCamp, Traversy Media, The Coding Train, Programming with Mosh, CS Dojo, Corey Schafer (Python), Web Dev Simplified, Fireship, etc. Format: https://www.youtube.com/watch?v=VIDEO_ID or https://youtu.be/VIDEO_ID. Only include links you are confident are real videos about ${detectedLang} programming concepts."
+      "Provide 2-4 REAL YouTube video URLs that teach this concept from channels like: freeCodeCamp, Traversy Media, Programming with Mosh, CS Dojo, Corey Schafer, Web Dev Simplified, Fireship"
     ],
     "documentationLinks": [
-      "Provide 2-3 REAL official documentation links for ${detectedLang} related to this specific error/concept"
+      "Provide 2-3 REAL official documentation links for ${detectedLang} related to this error/concept"
     ]
   },
   "errors": [
     {"type": "syntax|runtime|logical|warning|bad_practice", "line": 1, "message": "detailed error description with fix suggestion"}
   ],
   "correctedCode": "The complete fixed version of the code with ALL errors corrected. Preserve the original structure and add helpful comments where you made changes."
-}
+}`;
 
-${explanationLanguage !== 'english' ? `
-CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
-- "intent" field - write in ${explanationLanguage}
-- "actualBehavior" field - write in ${explanationLanguage}
-- "error" field - write in ${explanationLanguage}
-- "explanation" field - write in ${explanationLanguage}
-- "rootCause" field - write in ${explanationLanguage}
-- All "learning" fields - write in ${explanationLanguage}
-- "mentalModel" field - write in ${explanationLanguage}
-- "teacherMode" field - write in ${explanationLanguage}
-- "thinkMode" field - write in ${explanationLanguage}
-- "conceptBuilder" field - write in ${explanationLanguage}
-- "debugTrace" field - write in ${explanationLanguage}
-- "interviewMode" field - write in ${explanationLanguage}
-- "challengeMode" field - write in ${explanationLanguage}
-- "generalization" field - write in ${explanationLanguage}
-
-ONLY keep the following in English:
-- Code snippets and correctedCode
-- Programming keywords and function names
-- Variable names in examples
-
-The user selected ${explanationLanguage} as their preferred language. Please respect this choice.
-` : ''}
-
-Respond with ONLY the JSON object, no additional text or markdown formatting.`;
-
-    // Calculate dynamic token limit based on code size
+    // Calculate dynamic max tokens based on code size
     const codeLength = code.length;
     const baseTokens = 8192;
     const additionalTokens = Math.min(Math.floor(codeLength / 100) * 500, 8000);
     const maxTokens = baseTokens + additionalTokens;
 
-    const requestBody = {
+    // Use Vercel AI Gateway with AI SDK - no API key needed
+    const result = await generateText({
       model: 'google/gemini-2.0-flash-001',
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      prompt: prompt,
+      maxOutputTokens: maxTokens,
       temperature: 0.7,
-      max_tokens: maxTokens,
-    };
+    });
 
-    const response = await callOpenRouterWithRetry(requestBody);
+    const responseText = result.text;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenRouter API error:', errorText);
-      
-      if (response.status === 429) {
-        return NextResponse.json(
-          { error: 'API rate limit exceeded. Please wait a moment and try again.' },
-          { status: 429 }
-        );
-      }
-      
-      if (response.status === 401) {
-        return NextResponse.json(
-          { error: 'Invalid API key. Please check your OpenRouter API key.' },
-          { status: 401 }
-        );
-      }
-      
-      throw new Error(`OpenRouter API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const textContent = data.choices?.[0]?.message?.content || '';
-    
-    // Clean the response - remove markdown code blocks if present
-    let cleanedContent = textContent.trim();
-    if (cleanedContent.startsWith('```json')) {
-      cleanedContent = cleanedContent.slice(7);
-    } else if (cleanedContent.startsWith('```')) {
-      cleanedContent = cleanedContent.slice(3);
-    }
-    if (cleanedContent.endsWith('```')) {
-      cleanedContent = cleanedContent.slice(0, -3);
-    }
-    cleanedContent = cleanedContent.trim();
-
+    // Parse JSON response
     let parsedResult;
     try {
-      parsedResult = JSON.parse(cleanedContent);
-    } catch {
-      console.error('Failed to parse OpenRouter response:', cleanedContent);
-      throw new Error('Failed to parse AI response');
+      // Clean up the response - remove markdown code blocks if present
+      let cleanedResponse = responseText.trim();
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.slice(7);
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.slice(3);
+      }
+      if (cleanedResponse.endsWith('```')) {
+        cleanedResponse = cleanedResponse.slice(0, -3);
+      }
+      cleanedResponse = cleanedResponse.trim();
+      
+      parsedResult = JSON.parse(cleanedResponse);
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError);
+      console.error('Raw response:', responseText.substring(0, 500));
+      return NextResponse.json(
+        { error: 'Failed to parse AI response. Please try again.' },
+        { status: 500 }
+      );
     }
 
-    const codeHealth = calculateCodeHealth(parsedResult.errors || []);
-    
-    // Clean the corrected code to remove markdown formatting
-    const cleanedCorrectedCode = cleanCorrectedCode(parsedResult.correctedCode || code);
-    const diffView = generateDiff(code, cleanedCorrectedCode);
+    // Generate diff and health score
+    const diff = generateDiff(code, parsedResult.correctedCode || code);
+    const errors = parsedResult.errors || [];
+    const codeHealth = calculateCodeHealth(errors);
 
-    const result: DebugResult = {
+    const debugResult: DebugResult = {
       intent: parsedResult.intent || 'Unable to determine intent',
       actualBehavior: parsedResult.actualBehavior || 'Unable to determine behavior',
       error: parsedResult.error || 'No errors found',
       explanation: parsedResult.explanation || 'No explanation available',
       rootCause: parsedResult.rootCause || 'Unable to determine root cause',
-      learning: {
-        whyItHappened: parsedResult.learning?.whyItHappened || '',
-        whenItHappens: parsedResult.learning?.whenItHappens || '',
-        howToAvoid: parsedResult.learning?.howToAvoid || '',
-        concept: parsedResult.learning?.concept || '',
+      learning: parsedResult.learning || {
+        whyItHappened: 'Not available',
+        whenItHappens: 'Not available',
+        howToAvoid: 'Not available',
+        concept: 'Not available',
       },
-      mentalModel: parsedResult.mentalModel || '',
-      teacherMode: parsedResult.teacherMode,
-      thinkMode: parsedResult.thinkMode,
-      conceptBuilder: parsedResult.conceptBuilder,
-      debugTrace: parsedResult.debugTrace,
-      interviewMode: parsedResult.interviewMode,
-      challengeMode: parsedResult.challengeMode,
-      generalization: parsedResult.generalization || '',
+      mentalModel: parsedResult.mentalModel || 'No mental model available',
+      teacherMode: parsedResult.teacherMode || 'No teacher mode explanation available',
+      thinkMode: parsedResult.thinkMode || 'No think mode questions available',
+      conceptBuilder: parsedResult.conceptBuilder || 'No concept builder available',
+      debugTrace: parsedResult.debugTrace || 'No debug trace available',
+      interviewMode: parsedResult.interviewMode || 'No interview mode explanation available',
+      challengeMode: parsedResult.challengeMode || 'No challenge mode hints available',
+      generalization: parsedResult.generalization || 'No generalization available',
       resources: {
         youtubeLinks: validateYoutubeLinks(parsedResult.resources?.youtubeLinks || []),
         documentationLinks: validateDocLinks(parsedResult.resources?.documentationLinks || [], detectedLang),
       },
-      codeHealth,
-      correctedCode: cleanedCorrectedCode,
-      diffView,
+      errors: errors,
+      correctedCode: cleanCorrectedCode(parsedResult.correctedCode || code),
+      diff: diff,
+      codeHealth: codeHealth,
       detectedLanguage: detectedLang,
     };
 
-    return NextResponse.json(result);
+    return NextResponse.json(debugResult);
   } catch (error) {
     console.error('Debug API error:', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
-    // Provide more specific error messages
-    if (errorMessage.includes('timeout')) {
+    if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
       return NextResponse.json(
         { error: 'The code analysis is taking too long. Please try with smaller code or try again.' },
         { status: 504 }
@@ -658,27 +531,20 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     
     if (errorMessage.includes('parse') || errorMessage.includes('JSON')) {
       return NextResponse.json(
-        { error: 'Failed to process AI response. Please try again - the AI may have produced an invalid response.' },
+        { error: 'Failed to process AI response. Please try again.' },
         { status: 500 }
       );
     }
     
-    if (errorMessage.includes('Max retries')) {
+    if (errorMessage.includes('rate') || errorMessage.includes('limit') || errorMessage.includes('429')) {
       return NextResponse.json(
         { error: 'The AI service is currently busy. Please wait a moment and try again.' },
         { status: 503 }
       );
     }
     
-    if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
-      return NextResponse.json(
-        { error: 'Network error occurred. Please check your connection and try again.' },
-        { status: 503 }
-      );
-    }
-    
     return NextResponse.json(
-      { error: 'Failed to debug code. Please try again. If the problem persists, try with smaller code.' },
+      { error: 'Failed to debug code. Please try again.' },
       { status: 500 }
     );
   }
