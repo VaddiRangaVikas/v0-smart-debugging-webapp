@@ -1,6 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateText } from 'ai';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
+
+// OpenRouter API configuration
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// Retry helper with exponential backoff
+async function callOpenRouterWithRetry(body: object, retries = 5): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+      
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://smart-debugger.vercel.app',
+          'X-Title': 'Smart AI Debugger',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) return response;
+      
+      // Handle rate limiting with exponential backoff
+      if (response.status === 429 && i < retries - 1) {
+        const waitTime = Math.min((i + 1) * 3000, 15000);
+        console.log(`Rate limited, waiting ${waitTime}ms before retry ${i + 1}/${retries}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      // Handle server errors with retry
+      if (response.status >= 500 && i < retries - 1) {
+        const waitTime = (i + 1) * 2000;
+        console.log(`Server error ${response.status}, waiting ${waitTime}ms before retry ${i + 1}/${retries}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      // For other errors, try to get error details
+      const errorData = await response.json().catch(() => ({}));
+      console.error('OpenRouter API error:', errorData);
+      
+      if (response.status === 401) {
+        throw new Error('Invalid API key. Please check your OpenRouter API key.');
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      if ((error as Error).name === 'AbortError') {
+        throw new Error('Request timeout - the code analysis is taking too long. Please try with smaller code.');
+      }
+      if (i < retries - 1) {
+        const waitTime = (i + 1) * 2000;
+        console.log(`Network error, waiting ${waitTime}ms before retry ${i + 1}/${retries}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
+}
 
 function detectLanguage(code: string): ProgrammingLanguage {
   // Enhanced patterns with weights for better detection
@@ -445,15 +515,40 @@ Please provide your response in the following JSON format (respond ONLY with val
     const additionalTokens = Math.min(Math.floor(codeLength / 100) * 500, 8000);
     const maxTokens = baseTokens + additionalTokens;
 
-    // Use Vercel AI Gateway with AI SDK - no API key needed
-    const result = await generateText({
+    // Use OpenRouter API with retry logic
+    const requestBody = {
       model: 'google/gemini-2.0-flash-001',
-      prompt: prompt,
-      maxOutputTokens: maxTokens,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
       temperature: 0.7,
-    });
+      max_tokens: maxTokens,
+    };
 
-    const responseText = result.text;
+    const response = await callOpenRouterWithRetry(requestBody);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('OpenRouter API error:', errorData);
+      
+      if (response.status === 401) {
+        return NextResponse.json(
+          { error: 'Invalid API key. Please check your OpenRouter API key.' },
+          { status: 401 }
+        );
+      }
+      
+      return NextResponse.json(
+        { error: 'AI service error. Please try again.' },
+        { status: response.status }
+      );
+    }
+
+    const data = await response.json();
+    const responseText = data.choices?.[0]?.message?.content || '';
 
     // Parse JSON response
     let parsedResult;
@@ -521,6 +616,14 @@ Please provide your response in the following JSON format (respond ONLY with val
     console.error('Debug API error:', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Handle API key errors
+    if (errorMessage.includes('API key') || errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      return NextResponse.json(
+        { error: 'API key error. The service is temporarily unavailable. Please try again later.' },
+        { status: 401 }
+      );
+    }
     
     if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
       return NextResponse.json(
