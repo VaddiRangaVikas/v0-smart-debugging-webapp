@@ -44,11 +44,11 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
   const getDiffLineStyle = (type: DiffLine['type']) => {
     switch (type) {
       case 'added':
-        return 'bg-cyan-500/10 border-l-2 border-l-cyan-400';
+        return 'bg-blue-500/20 border-l-4 border-l-blue-500';
       case 'removed':
-        return 'bg-rose-500/10 border-l-2 border-l-rose-400';
+        return 'bg-red-500/20 border-l-4 border-l-red-500';
       case 'unchanged':
-        return 'bg-transparent border-l-2 border-l-transparent';
+        return 'bg-muted/5 border-l-4 border-l-muted/30';
       default:
         return '';
     }
@@ -57,11 +57,11 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
   const getDiffIcon = (type: DiffLine['type']) => {
     switch (type) {
       case 'added':
-        return <Plus className="h-3 w-3 text-cyan-400" />;
+        return <Plus className="h-3.5 w-3.5 text-blue-400 font-bold" />;
       case 'removed':
-        return <Minus className="h-3 w-3 text-rose-400" />;
+        return <Minus className="h-3.5 w-3.5 text-red-400 font-bold" />;
       default:
-        return <span className="w-3" />;
+        return <span className="w-3.5 text-muted-foreground/30 text-center">|</span>;
     }
   };
 
@@ -156,17 +156,17 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
         <div className="mt-3 flex flex-wrap gap-2">
           <Badge 
             variant="outline" 
-            className="gap-1.5 border-rose-500/30 bg-rose-500/10 text-rose-400"
+            className="gap-1.5 border-red-500/50 bg-red-500/20 text-red-400 font-medium"
           >
             <Minus className="h-3 w-3" />
-            <span>{removedLines} removed</span>
+            <span>{removedLines} errors/removed</span>
           </Badge>
           <Badge 
             variant="outline" 
-            className="gap-1.5 border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+            className="gap-1.5 border-blue-500/50 bg-blue-500/20 text-blue-400 font-medium"
           >
             <Plus className="h-3 w-3" />
-            <span>{addedLines} added</span>
+            <span>{addedLines} fixes/added</span>
           </Badge>
           <Badge 
             variant="outline" 
@@ -205,23 +205,28 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
                   <div
                     key={i}
                     className={cn(
-                      'flex items-start gap-2 px-4 py-0.5 transition-colors',
+                      'flex items-start gap-2 px-4 py-1 transition-colors hover:bg-muted/10',
                       getDiffLineStyle(line.type),
-                      line.type === 'added' && 'animate-[pulse_2s_ease-in-out_1]',
-                      line.type === 'removed' && 'opacity-60'
+                      line.type === 'added' && 'animate-[fadeIn_0.5s_ease-in-out]',
                     )}
                   >
-                    <span className="flex w-5 shrink-0 items-center justify-center">
+                    <span className="flex w-6 shrink-0 items-center justify-center">
                       {getDiffIcon(line.type)}
                     </span>
-                    <span className="w-8 shrink-0 text-right text-muted-foreground/40 select-none">
+                    <span className={cn(
+                      "w-10 shrink-0 text-right select-none font-medium",
+                      line.type === 'removed' && 'text-red-400/70',
+                      line.type === 'added' && 'text-blue-400/70',
+                      line.type === 'unchanged' && 'text-muted-foreground/40'
+                    )}>
                       {line.lineNumber}
                     </span>
                     <span
                       className={cn(
                         'flex-1 whitespace-pre-wrap break-all',
-                        line.type === 'removed' && 'text-rose-400 line-through',
-                        line.type === 'added' && 'text-cyan-400'
+                        line.type === 'removed' && 'text-red-400 line-through decoration-red-500/50 decoration-2',
+                        line.type === 'added' && 'text-blue-400 font-medium',
+                        line.type === 'unchanged' && 'text-foreground/80'
                       )}
                     >
                       {line.content || ' '}
