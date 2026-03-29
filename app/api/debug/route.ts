@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
-// Google Gemini API configuration (FREE tier: 15 RPM, 1500 RPD)
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// OpenRouter API configuration
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Call Google Gemini API with retry logic
-async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
+// Call OpenRouter API with retry logic
+async function callOpenRouterAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
   // Check if API key is configured
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not configured. Please add your Google Gemini API key.');
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY is not configured. Please add your OpenRouter API key.');
   }
+  
   const maxRetries = 3;
   let lastError: Error | null = null;
 
@@ -19,33 +20,24 @@ async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
-      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://smart-debugger.vercel.app',
+          'X-Title': 'Smart AI Debugger',
         },
         body: JSON.stringify({
-          contents: [
+          model: 'google/gemini-2.0-flash-001',
+          messages: [
             {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
+              role: 'user',
+              content: prompt,
             },
           ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: maxTokens,
-            topP: 0.95,
-            topK: 40,
-          },
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-          ],
+          max_tokens: maxTokens,
+          temperature: 0.7,
         }),
         signal: controller.signal,
       });
@@ -54,18 +46,18 @@ async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Gemini API error:', response.status, errorData);
+        console.error('OpenRouter API error:', response.status, errorData);
         
-        if (response.status === 400) {
-          throw new Error('Invalid request to Gemini API');
+        if (response.status === 401) {
+          throw new Error('Invalid OpenRouter API key');
         }
-        if (response.status === 403) {
-          throw new Error('Invalid Gemini API key');
+        if (response.status === 402) {
+          throw new Error('Insufficient credits - please add credits to your OpenRouter account');
         }
         if (response.status === 429) {
           // Rate limited, wait and retry
           if (attempt < maxRetries - 1) {
-            const waitTime = (attempt + 1) * 5000; // Longer wait for rate limits
+            const waitTime = (attempt + 1) * 3000;
             console.log(`Rate limited, waiting ${waitTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
             continue;
@@ -83,10 +75,10 @@ async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<
       }
 
       const data = await response.json();
-      const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const content = data.choices?.[0]?.message?.content;
       
       if (!content) {
-        console.error('Empty response from Gemini:', JSON.stringify(data));
+        console.error('Empty response from OpenRouter:', JSON.stringify(data));
         throw new Error('Empty response from AI');
       }
       
@@ -536,8 +528,8 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
     const additionalTokens = Math.min(Math.floor(codeLength / 200) * 500, 4000);
     const maxTokens = baseTokens + additionalTokens;
 
-    // Use Google Gemini API (FREE tier)
-    const responseText = await callGeminiAPI(prompt, maxTokens);
+    // Use OpenRouter API
+    const responseText = await callOpenRouterAPI(prompt, maxTokens);
 
     if (!responseText) {
       return NextResponse.json(
@@ -642,17 +634,24 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   
   // Handle missing API key
-  if (errorMessage.includes('GEMINI_API_KEY') || errorMessage.includes('not configured')) {
+  if (errorMessage.includes('OPENROUTER_API_KEY') || errorMessage.includes('not configured')) {
   return NextResponse.json(
-  { error: 'API key not configured. Please add your GEMINI_API_KEY in the environment variables.' },
+  { error: 'API key not configured. Please add your OPENROUTER_API_KEY in the environment variables.' },
   { status: 500 }
   );
   }
   
   if (errorMessage.includes('Invalid') && errorMessage.includes('API')) {
   return NextResponse.json(
-  { error: 'Invalid API key. Please check your GEMINI_API_KEY is correct.' },
+  { error: 'Invalid API key. Please check your OPENROUTER_API_KEY is correct.' },
   { status: 401 }
+  );
+  }
+  
+  if (errorMessage.includes('Insufficient credits')) {
+  return NextResponse.json(
+  { error: 'Insufficient credits. Please add credits to your OpenRouter account.' },
+  { status: 402 }
   );
   }
     
