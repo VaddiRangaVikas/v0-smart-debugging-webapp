@@ -91,8 +91,8 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
 
   // Check if the code is essentially the same (no real changes needed)
   const noChangesNeeded = !correctedCode || 
-    correctedCode.trim() === originalCode.trim() ||
-    diffView.every(d => d.type === 'unchanged');
+    correctedCode.trim().length === 0 ||
+    (correctedCode.trim() === originalCode.trim() && diffView.every(d => d.type === 'unchanged'));
 
   if (noChangesNeeded) {
     return (

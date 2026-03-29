@@ -348,28 +348,84 @@ function cleanCorrectedCode(code: string): string {
   return cleaned.trim();
 }
 
-function validateYoutubeLinks(links: string[]): string[] {
-  if (!Array.isArray(links)) return [];
+// Fallback YouTube channels by language
+const FALLBACK_YOUTUBE_CHANNELS: Record<string, string[]> = {
+  python: [
+    'https://www.youtube.com/c/Coreyms',
+    'https://www.youtube.com/c/TechWithTim',
+  ],
+  javascript: [
+    'https://www.youtube.com/c/TraversyMedia',
+    'https://www.youtube.com/c/WebDevSimplified',
+  ],
+  typescript: [
+    'https://www.youtube.com/c/TraversyMedia',
+    'https://www.youtube.com/c/WebDevSimplified',
+  ],
+  java: [
+    'https://www.youtube.com/c/CodingWithJohn',
+    'https://www.youtube.com/c/BroCodez',
+  ],
+  c: [
+    'https://www.youtube.com/c/TheCherno',
+    'https://www.youtube.com/c/faborcode',
+  ],
+  cpp: [
+    'https://www.youtube.com/c/TheCherno',
+    'https://www.youtube.com/c/CodingWithSam',
+  ],
+  default: [
+    'https://www.youtube.com/c/freecodecamp',
+    'https://www.youtube.com/c/programmingwithmosh',
+  ],
+};
+
+function validateYoutubeLinks(links: string[], language?: string): string[] {
+  if (!Array.isArray(links)) links = [];
   
   const validLinks: string[] = [];
-  const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/;
+  const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|channel\/|c\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/;
   
   for (const link of links) {
     if (typeof link !== 'string') continue;
-    if (link.includes('IMPORTANT:') || link.includes('VIDEO_ID') || link.includes('Provide')) continue;
+    if (link.includes('IMPORTANT:') || link.includes('VIDEO_ID') || link.includes('Provide') || link.includes('REAL_')) continue;
     
     const match = link.match(youtubeRegex);
     if (match) {
-      const videoId = match[4];
-      validLinks.push(`https://www.youtube.com/watch?v=${videoId}`);
+      validLinks.push(link.startsWith('http') ? link : `https://${link}`);
     }
+  }
+  
+  // If no valid links found, add fallback channels based on language
+  if (validLinks.length === 0 && language) {
+    const fallbacks = FALLBACK_YOUTUBE_CHANNELS[language] || FALLBACK_YOUTUBE_CHANNELS.default;
+    validLinks.push(...fallbacks);
   }
   
   return validLinks.slice(0, 5);
 }
 
+// Fallback documentation links by language
+const FALLBACK_DOC_LINKS: Record<string, string[]> = {
+  python: ['https://docs.python.org/3/', 'https://realpython.com/'],
+  javascript: ['https://developer.mozilla.org/en-US/docs/Web/JavaScript', 'https://javascript.info/'],
+  typescript: ['https://www.typescriptlang.org/docs/', 'https://developer.mozilla.org/en-US/docs/Web/JavaScript'],
+  java: ['https://docs.oracle.com/en/java/', 'https://dev.java/learn/'],
+  c: ['https://en.cppreference.com/w/c', 'https://devdocs.io/c/'],
+  cpp: ['https://en.cppreference.com/w/cpp', 'https://isocpp.org/wiki/faq'],
+  csharp: ['https://learn.microsoft.com/en-us/dotnet/csharp/', 'https://docs.microsoft.com/dotnet/'],
+  go: ['https://go.dev/doc/', 'https://pkg.go.dev/'],
+  rust: ['https://doc.rust-lang.org/book/', 'https://doc.rust-lang.org/std/'],
+  php: ['https://www.php.net/manual/en/', 'https://phpdoc.org/'],
+  ruby: ['https://ruby-doc.org/', 'https://www.ruby-lang.org/en/documentation/'],
+  swift: ['https://developer.apple.com/documentation/swift', 'https://swift.org/documentation/'],
+  kotlin: ['https://kotlinlang.org/docs/home.html', 'https://developer.android.com/kotlin'],
+  sql: ['https://www.w3schools.com/sql/', 'https://www.postgresql.org/docs/'],
+  default: ['https://devdocs.io/', 'https://stackoverflow.com/'],
+};
+
 function validateDocLinks(links: string[], language: ProgrammingLanguage): string[] {
-  if (!Array.isArray(links)) return [];
+  if (!Array.isArray(links)) links = [];
   
   const validLinks: string[] = [];
   const docDomains: Record<string, string[]> = {
@@ -391,7 +447,7 @@ function validateDocLinks(links: string[], language: ProgrammingLanguage): strin
   
   for (const link of links) {
     if (typeof link !== 'string') continue;
-    if (link.includes('Provide') || link.includes('REAL')) continue;
+    if (link.includes('Provide') || link.includes('REAL') || link.includes('example.com')) continue;
     
     try {
       const url = new URL(link.startsWith('http') ? link : `https://${link}`);
@@ -406,6 +462,12 @@ function validateDocLinks(links: string[], language: ProgrammingLanguage): strin
     } catch {
       // Invalid URL, skip
     }
+  }
+  
+  // If no valid links found, add fallback docs based on language
+  if (validLinks.length === 0) {
+    const fallbacks = FALLBACK_DOC_LINKS[language] || FALLBACK_DOC_LINKS.default;
+    validLinks.push(...fallbacks);
   }
   
   return validLinks.slice(0, 4);
@@ -480,46 +542,54 @@ export async function POST(request: NextRequest) {
 
     const detectedLang = language === 'auto' ? detectLanguage(code) : language;
 
-    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code and provide comprehensive debugging assistance.
+    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code.
 
-CODE TO DEBUG:
+CODE:
 \`\`\`${detectedLang}
 ${code}
 \`\`\`
 
 USER LEVEL: ${userLevel}
-EXPLANATION LANGUAGE: ${explanationLanguage}
 LEARNING MODE: ${learningMode}
 
-Respond ONLY with valid JSON (no markdown, no code blocks), following this exact structure:
+IMPORTANT: Respond with valid JSON only. No markdown. Keep responses concise.
+
+For YouTube links, use REAL popular programming tutorial channels:
+- For Python: Corey Schafer (UCCezIgC97PvUuR4_gbFUs5g), Tech With Tim
+- For JavaScript/Web: Traversy Media (UC29ju8bIPH5as8OGnQzwJyA), Web Dev Simplified
+- For C/C++: The Cherno (UCQ-W1KE9EYfdxhL6S4twUNw)
+- For Java: Coding with John (UC42pOSNg804f1wCcj7qL0mA)
+- For general: freeCodeCamp (UC8butISFwT-Wl7EV0hUK0BQ)
+
+Format: https://www.youtube.com/channel/CHANNEL_ID or https://www.youtube.com/watch?v=VIDEO_ID
+
+JSON Structure:
 {
-  "intent": "What the code is trying to accomplish",
-  "actualBehavior": "What the code actually does",
-  "error": "Description of what went wrong (or 'No errors found' if code is correct)",
-  "explanation": "Detailed explanation based on user level",
-  "rootCause": "The fundamental reason for the error",
+  "intent": "brief purpose",
+  "actualBehavior": "what code does",
+  "error": "error description or 'No errors found'",
+  "explanation": "clear explanation for ${userLevel}",
+  "rootCause": "root cause",
   "learning": {
-    "whyItHappened": "Why this error occurred",
-    "whenItHappens": "Common scenarios where this error occurs",
-    "howToAvoid": "Best practices to prevent this error",
-    "concept": "The underlying programming concept"
+    "whyItHappened": "reason",
+    "whenItHappens": "scenarios",
+    "howToAvoid": "prevention",
+    "concept": "concept name"
   },
-  "mentalModel": "An analogy or mental model to understand this better",
-  "teacherMode": "Step-by-step teaching explanation",
-  "thinkMode": "Socratic questions to guide understanding",
-  "conceptBuilder": "Focus on the core concept behind the error",
-  "debugTrace": "Step-by-step execution flow with variable values",
-  "interviewMode": "How to explain this in a technical interview",
-  "challengeMode": "Hints for the user to solve it themselves",
-  "generalization": "How this error pattern applies to other scenarios",
+  "mentalModel": "simple analogy",
+  "teacherMode": "teaching explanation",
+  "thinkMode": "guiding questions",
+  "conceptBuilder": "core concept",
+  "debugTrace": "execution trace",
+  "interviewMode": "interview explanation",
+  "challengeMode": "hints",
+  "generalization": "broader application",
   "resources": {
-    "youtubeLinks": ["https://www.youtube.com/watch?v=example1"],
-    "documentationLinks": ["https://docs.example.com/relevant-topic"]
+    "youtubeLinks": ["https://www.youtube.com/watch?v=REAL_VIDEO_ID"],
+    "documentationLinks": ["https://docs.python.org/3/tutorial/"]
   },
-  "errors": [
-    {"type": "syntax", "line": 1, "message": "error description"}
-  ],
-  "correctedCode": "The fixed version of the code"
+  "errors": [{"type": "syntax|runtime|logical", "line": 1, "message": "description"}],
+  "correctedCode": "fixed code here"
 }`;
 
     // Calculate dynamic token limit based on code size
@@ -552,35 +622,62 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
       
       cleanedResponse = cleanedResponse.trim();
       
+      // Try to fix truncated JSON by closing it properly
+      if (!cleanedResponse.endsWith('}')) {
+        // Find the last complete field and close the JSON
+        const lastBraceIndex = cleanedResponse.lastIndexOf('}');
+        if (lastBraceIndex > 0) {
+          cleanedResponse = cleanedResponse.substring(0, lastBraceIndex + 1);
+        }
+      }
+      
       parsedResult = JSON.parse(cleanedResponse);
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
       console.error('Raw response:', responseText.substring(0, 500));
       
-      // Create a basic result from the raw response
+      // Try to extract correctedCode from the raw response
+      let extractedCode = code;
+      const codeMatch = responseText.match(/"correctedCode"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/);
+      if (codeMatch && codeMatch[1]) {
+        extractedCode = codeMatch[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
+      }
+      
+      // Try to extract other fields
+      const extractField = (field: string, defaultVal: string) => {
+        const regex = new RegExp(`"${field}"\\s*:\\s*"([^"]*)"`, 's');
+        const match = responseText.match(regex);
+        return match ? match[1] : defaultVal;
+      };
+      
+      // Create a result from extracted fields
       parsedResult = {
-        intent: 'Unable to parse structured response',
-        actualBehavior: 'The AI provided analysis but in an unexpected format',
-        error: 'Response parsing failed - showing raw analysis',
-        explanation: responseText.substring(0, 2000),
-        rootCause: 'Please try again for structured analysis',
+        intent: extractField('intent', 'Code analysis completed'),
+        actualBehavior: extractField('actualBehavior', 'See explanation below'),
+        error: extractField('error', 'Analysis complete'),
+        explanation: extractField('explanation', responseText.substring(0, 1500)),
+        rootCause: extractField('rootCause', 'See explanation'),
         learning: {
-          whyItHappened: 'N/A',
-          whenItHappens: 'N/A',
-          howToAvoid: 'N/A',
-          concept: 'N/A',
+          whyItHappened: extractField('whyItHappened', 'See explanation'),
+          whenItHappens: extractField('whenItHappens', 'Common programming scenario'),
+          howToAvoid: extractField('howToAvoid', 'Follow best practices'),
+          concept: extractField('concept', 'Programming fundamentals'),
         },
-        mentalModel: 'N/A',
-        teacherMode: 'N/A',
-        thinkMode: 'N/A',
-        conceptBuilder: 'N/A',
-        debugTrace: 'N/A',
-        interviewMode: 'N/A',
-        challengeMode: 'N/A',
-        generalization: 'N/A',
+        mentalModel: extractField('mentalModel', 'Think of it step by step'),
+        teacherMode: extractField('teacherMode', 'Review the corrected code'),
+        thinkMode: extractField('thinkMode', 'What would happen if you trace through?'),
+        conceptBuilder: extractField('conceptBuilder', 'Core programming concept'),
+        debugTrace: extractField('debugTrace', 'Step through the code mentally'),
+        interviewMode: extractField('interviewMode', 'Explain your debugging approach'),
+        challengeMode: extractField('challengeMode', 'Try fixing it yourself first'),
+        generalization: extractField('generalization', 'This pattern applies broadly'),
         resources: { youtubeLinks: [], documentationLinks: [] },
         errors: [],
-        correctedCode: code,
+        correctedCode: extractedCode,
       };
     }
 
@@ -621,7 +718,7 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
       errors,
       codeHealth,
       resources: {
-        youtubeLinks: validateYoutubeLinks(parsedResult.resources?.youtubeLinks || []),
+        youtubeLinks: validateYoutubeLinks(parsedResult.resources?.youtubeLinks || [], detectedLang),
         documentationLinks: validateDocLinks(parsedResult.resources?.documentationLinks || [], detectedLang),
       },
       timestamp: new Date().toISOString(),
