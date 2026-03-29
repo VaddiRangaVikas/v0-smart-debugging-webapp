@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
-// OpenRouter API configuration
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+// OpenRouter API configuration - using the first API key which has credits
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Retry helper with exponential backoff
@@ -52,6 +52,12 @@ async function callOpenRouterWithRetry(body: object, retries = 5): Promise<Respo
       
       if (response.status === 401) {
         throw new Error('Invalid API key. Please check your OpenRouter API key.');
+      }
+      
+      // Handle insufficient credits - retry with lower tokens
+      if (response.status === 402) {
+        console.log('Insufficient credits, will retry with lower token limit');
+        throw new Error('Insufficient credits. Please try with smaller code.');
       }
       
       return response;
@@ -510,10 +516,11 @@ Please provide your response in the following JSON format (respond ONLY with val
 }`;
 
     // Calculate dynamic max tokens based on code size
+    // Keep it low (3000) to fit within free tier limits
     const codeLength = code.length;
-    const baseTokens = 8192;
-    const additionalTokens = Math.min(Math.floor(codeLength / 100) * 500, 8000);
-    const maxTokens = baseTokens + additionalTokens;
+    const baseTokens = 2500;
+    const additionalTokens = Math.min(Math.floor(codeLength / 500) * 200, 500);
+    const maxTokens = Math.min(baseTokens + additionalTokens, 3500); // Cap at 3500 to fit within credits
 
     // Use OpenRouter API with retry logic
     const requestBody = {
@@ -530,16 +537,23 @@ Please provide your response in the following JSON format (respond ONLY with val
 
     const response = await callOpenRouterWithRetry(requestBody);
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('OpenRouter API error:', errorData);
-      
-      if (response.status === 401) {
-        return NextResponse.json(
-          { error: 'Invalid API key. Please check your OpenRouter API key.' },
-          { status: 401 }
-        );
-      }
+if (!response.ok) {
+  const errorData = await response.json().catch(() => ({}));
+  console.error('OpenRouter API error:', errorData);
+  
+  if (response.status === 401) {
+  return NextResponse.json(
+  { error: 'Invalid API key. Please check your OpenRouter API key.' },
+  { status: 401 }
+  );
+  }
+  
+  if (response.status === 402) {
+  return NextResponse.json(
+  { error: 'API credits exhausted. Please try with smaller code or wait a few minutes.' },
+  { status: 402 }
+  );
+  }
       
       return NextResponse.json(
         { error: 'AI service error. Please try again.' },
