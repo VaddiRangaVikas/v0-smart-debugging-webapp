@@ -1,6 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateText } from 'ai';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
+
+// DeepSeek API configuration
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'sk-6fd30804c0234bae949225b35caa56a0';
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+
+// Call DeepSeek API with retry logic
+async function callDeepSeekAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+
+      const response = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          max_tokens: maxTokens,
+          temperature: 0.7,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('DeepSeek API error:', response.status, errorData);
+        
+        if (response.status === 401) {
+          throw new Error('Invalid API key');
+        }
+        if (response.status === 429) {
+          // Rate limited, wait and retry
+          if (attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 2000));
+            continue;
+          }
+          throw new Error('Rate limited');
+        }
+        if (response.status >= 500) {
+          // Server error, retry
+          if (attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
+            continue;
+          }
+        }
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      
+      if (!content) {
+        throw new Error('Empty response from AI');
+      }
+      
+      return content;
+    } catch (error) {
+      lastError = error as Error;
+      if ((error as Error).name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
+        continue;
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed after retries');
+}
 
 function detectLanguage(code: string): ProgrammingLanguage {
   const patterns: Record<ProgrammingLanguage, { pattern: RegExp; weight: number }[]> = {
@@ -426,15 +509,14 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
   "correctedCode": "The fixed version of the code"
 }`;
 
-    // Use Vercel AI Gateway - no API key needed
-    const result = await generateText({
-      model: 'google/gemini-2.0-flash-001',
-      prompt: prompt,
-      maxOutputTokens: 4096,
-      temperature: 0.7,
-    });
+    // Calculate dynamic token limit based on code size
+    const codeLength = code.length;
+    const baseTokens = 4096;
+    const additionalTokens = Math.min(Math.floor(codeLength / 200) * 500, 4000);
+    const maxTokens = baseTokens + additionalTokens;
 
-    const responseText = result.text;
+    // Use DeepSeek API
+    const responseText = await callDeepSeekAPI(prompt, maxTokens);
 
     if (!responseText) {
       return NextResponse.json(
@@ -538,6 +620,13 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
+    if (errorMessage.includes('Invalid API key')) {
+      return NextResponse.json(
+        { error: 'API configuration error. Please contact support.' },
+        { status: 401 }
+      );
+    }
+    
     if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
       return NextResponse.json(
         { error: 'The code analysis is taking too long. Please try with smaller code.' },
@@ -552,7 +641,7 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
       );
     }
     
-    if (errorMessage.includes('rate') || errorMessage.includes('limit')) {
+    if (errorMessage.includes('rate') || errorMessage.includes('Rate limited')) {
       return NextResponse.json(
         { error: 'AI service is busy. Please wait a moment and try again.' },
         { status: 429 }
