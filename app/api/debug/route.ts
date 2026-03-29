@@ -1,32 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
-const OPENROUTER_API_KEY = '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';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-async function callOpenRouterWithRetry(body: object, retries = 3): Promise<Response> {
+// Timeout helper for fetch requests
+function fetchWithTimeout(url: string, options: RequestInit, timeout = 60000): Promise<Response> {
+  return Promise.race([
+    fetch(url, options),
+    new Promise<Response>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout - the code analysis is taking too long. Please try with smaller code.')), timeout)
+    ),
+  ]);
+}
+
+async function callOpenRouterWithRetry(body: object, retries = 5): Promise<Response> {
+  let lastError: Error | null = null;
+  
   for (let i = 0; i < retries; i++) {
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://v0.dev',
-        'X-Title': 'AI Debug Assistant',
-      },
-      body: JSON.stringify(body),
-    });
-    
-    if (response.ok) return response;
-    
-    if (response.status === 429 && i < retries - 1) {
-      await new Promise(resolve => setTimeout(resolve, (i + 1) * 2000));
-      continue;
+    try {
+      const response = await fetchWithTimeout(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://smart-debugger.vercel.app',
+          'X-Title': 'AI Debug Assistant',
+        },
+        body: JSON.stringify(body),
+      }, 90000); // 90 second timeout
+      
+      if (response.ok) return response;
+      
+      // Handle rate limiting with exponential backoff
+      if (response.status === 429 && i < retries - 1) {
+        const waitTime = Math.min((i + 1) * 3000, 15000); // 3s, 6s, 9s, 12s, 15s max
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      // Handle server errors with retry
+      if (response.status >= 500 && i < retries - 1) {
+        const waitTime = (i + 1) * 2000;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      if (i < retries - 1) {
+        const waitTime = (i + 1) * 2000;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
     }
-    
-    return response;
   }
-  throw new Error('Max retries exceeded');
+  
+  throw lastError || new Error('Max retries exceeded');
 }
 
 function detectLanguage(code: string): ProgrammingLanguage {
@@ -289,6 +320,75 @@ function cleanCorrectedCode(code: string): string {
   return cleaned.trim();
 }
 
+// Validate and clean YouTube links
+function validateYoutubeLinks(links: string[]): string[] {
+  if (!Array.isArray(links)) return [];
+  
+  const validLinks: string[] = [];
+  const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/;
+  
+  for (const link of links) {
+    if (typeof link !== 'string') continue;
+    
+    // Skip placeholder text
+    if (link.includes('IMPORTANT:') || link.includes('VIDEO_ID') || link.includes('Provide')) continue;
+    
+    const match = link.match(youtubeRegex);
+    if (match) {
+      // Normalize to standard YouTube URL format
+      const videoId = match[4];
+      validLinks.push(`https://www.youtube.com/watch?v=${videoId}`);
+    }
+  }
+  
+  return validLinks.slice(0, 5); // Max 5 links
+}
+
+// Validate documentation links
+function validateDocLinks(links: string[], language: ProgrammingLanguage): string[] {
+  if (!Array.isArray(links)) return [];
+  
+  const validLinks: string[] = [];
+  const docDomains: Record<string, string[]> = {
+    python: ['docs.python.org', 'realpython.com', 'python.org'],
+    javascript: ['developer.mozilla.org', 'javascript.info', 'nodejs.org', 'ecma-international.org'],
+    typescript: ['typescriptlang.org', 'developer.mozilla.org'],
+    java: ['docs.oracle.com', 'dev.java', 'openjdk.org'],
+    c: ['en.cppreference.com', 'devdocs.io', 'gnu.org'],
+    cpp: ['en.cppreference.com', 'isocpp.org', 'cplusplus.com'],
+    csharp: ['docs.microsoft.com', 'learn.microsoft.com'],
+    go: ['go.dev', 'golang.org', 'pkg.go.dev'],
+    rust: ['doc.rust-lang.org', 'rust-lang.org', 'docs.rs'],
+    php: ['php.net', 'phpdoc.org'],
+    ruby: ['ruby-doc.org', 'ruby-lang.org'],
+    swift: ['developer.apple.com', 'swift.org'],
+    kotlin: ['kotlinlang.org', 'developer.android.com'],
+    sql: ['w3schools.com', 'postgresql.org', 'mysql.com', 'sqlite.org'],
+  };
+  
+  for (const link of links) {
+    if (typeof link !== 'string') continue;
+    if (link.includes('Provide') || link.includes('REAL')) continue;
+    
+    try {
+      const url = new URL(link.startsWith('http') ? link : `https://${link}`);
+      // Check if it's a valid documentation domain
+      const isValidDomain = docDomains[language]?.some(domain => url.hostname.includes(domain)) ||
+                           url.hostname.includes('developer.') ||
+                           url.hostname.includes('docs.') ||
+                           url.hostname.includes('devdocs.io') ||
+                           url.hostname.includes('stackoverflow.com');
+      if (isValidDomain) {
+        validLinks.push(url.href);
+      }
+    } catch {
+      // Invalid URL, skip
+    }
+  }
+  
+  return validLinks.slice(0, 4); // Max 4 links
+}
+
 function generateDiff(original: string, corrected: string): DiffLine[] {
   // Clean both codes for comparison
   const cleanOriginal = original.trim();
@@ -363,9 +463,15 @@ export async function POST(request: NextRequest) {
 
     const detectedLang = language === 'auto' ? detectLanguage(code) : language;
 
-    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code and provide comprehensive debugging assistance.
+    const prompt = `You are an expert AI debugging assistant with deep knowledge of ${detectedLang}. Carefully analyze the following code line by line and provide comprehensive debugging assistance.
 
-CODE TO DEBUG:
+IMPORTANT INSTRUCTIONS:
+1. Analyze EVERY line of code thoroughly, even if the code is large
+2. Look for ALL types of errors: syntax errors, runtime errors, logical errors, type errors, edge cases, bad practices
+3. For large code, systematically check each function/block
+4. Be thorough - don't miss any issues
+
+CODE TO DEBUG (${code.split('\n').length} lines):
 \`\`\`${detectedLang}
 ${code}
 \`\`\`
@@ -376,33 +482,37 @@ LEARNING MODE: ${learningMode}
 
 Please provide your response in the following JSON format (respond ONLY with valid JSON, no markdown):
 {
-  "intent": "What the code is trying to accomplish",
-  "actualBehavior": "What the code actually does",
-  "error": "Description of what went wrong (or 'No errors found' if code is correct)",
-  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language, no jargon' : userLevel === 'intermediate' ? 'Use some technical terms with explanations' : 'Deep technical explanation with compiler-level reasoning'}",
-  "rootCause": "The fundamental reason for the error",
+  "intent": "What the code is trying to accomplish (be specific about the algorithm/functionality)",
+  "actualBehavior": "What the code actually does (describe the current behavior in detail)",
+  "error": "Description of what went wrong (or 'No errors found - code is correct' if no issues). Be specific about the error type and location",
+  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language, no jargon, explain like talking to a student' : userLevel === 'intermediate' ? 'Use technical terms with clear explanations' : 'Deep technical explanation with compiler-level reasoning, memory management details, and performance implications'}",
+  "rootCause": "The fundamental reason for the error - explain WHY the code fails, not just WHAT is wrong",
   "learning": {
-    "whyItHappened": "Why this error occurred",
-    "whenItHappens": "Common scenarios where this error occurs",
-    "howToAvoid": "Best practices to prevent this error",
-    "concept": "The underlying programming concept"
+    "whyItHappened": "Detailed explanation of why this specific error occurred in this context",
+    "whenItHappens": "Common scenarios and patterns where this type of error occurs",
+    "howToAvoid": "Best practices and coding patterns to prevent this error in the future",
+    "concept": "The underlying programming concept (e.g., variable scope, memory management, async/await, etc.)"
   },
-  "mentalModel": "An analogy or mental model to understand this better",
-  "teacherMode": "Step-by-step teaching explanation with examples",
-  "thinkMode": "Socratic questions to guide the user to understand the error themselves",
-  "conceptBuilder": "Focus on the core concept behind the error",
-  "debugTrace": "Step-by-step execution flow with variable values",
-  "interviewMode": "How to explain this in a technical interview",
-  "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
-  "generalization": "How this error pattern applies to other scenarios",
+  "mentalModel": "A clear analogy or mental model to understand this concept (use real-world examples)",
+  "teacherMode": "Step-by-step teaching explanation with examples - explain as if teaching a class",
+  "thinkMode": "Socratic questions to guide the user to understand the error themselves (3-5 thought-provoking questions)",
+  "conceptBuilder": "Focus on the core programming concept behind the error - explain the theory",
+  "debugTrace": "Step-by-step execution trace showing variable values at each step (format: Line X: variable = value)",
+  "interviewMode": "How to explain this error and its fix in a technical interview (include what interviewer expects to hear)",
+  "challengeMode": "Progressive hints for the user to solve it themselves (Hint 1: vague, Hint 2: more specific, Hint 3: almost gives it away)",
+  "generalization": "How this error pattern applies to other programming scenarios and languages",
   "resources": {
-    "youtubeLinks": ["Relevant YouTube video URLs for learning this concept"],
-    "documentationLinks": ["Official documentation links for the programming language"]
+    "youtubeLinks": [
+      "IMPORTANT: Provide 2-4 REAL, WORKING YouTube video URLs that teach the specific concept related to this error. Use videos from popular programming channels like: freeCodeCamp, Traversy Media, The Coding Train, Programming with Mosh, CS Dojo, Corey Schafer (Python), Web Dev Simplified, Fireship, etc. Format: https://www.youtube.com/watch?v=VIDEO_ID or https://youtu.be/VIDEO_ID. Only include links you are confident are real videos about ${detectedLang} programming concepts."
+    ],
+    "documentationLinks": [
+      "Provide 2-3 REAL official documentation links for ${detectedLang} related to this specific error/concept"
+    ]
   },
   "errors": [
-    {"type": "syntax|runtime|logical|warning|bad_practice", "line": 1, "message": "error description"}
+    {"type": "syntax|runtime|logical|warning|bad_practice", "line": 1, "message": "detailed error description with fix suggestion"}
   ],
-  "correctedCode": "The fixed version of the code"
+  "correctedCode": "The complete fixed version of the code with ALL errors corrected. Preserve the original structure and add helpful comments where you made changes."
 }
 
 ${explanationLanguage !== 'english' ? `
@@ -432,6 +542,12 @@ The user selected ${explanationLanguage} as their preferred language. Please res
 
 Respond with ONLY the JSON object, no additional text or markdown formatting.`;
 
+    // Calculate dynamic token limit based on code size
+    const codeLength = code.length;
+    const baseTokens = 8192;
+    const additionalTokens = Math.min(Math.floor(codeLength / 100) * 500, 8000);
+    const maxTokens = baseTokens + additionalTokens;
+
     const requestBody = {
       model: 'google/gemini-2.0-flash-001',
       messages: [
@@ -441,7 +557,7 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
         },
       ],
       temperature: 0.7,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
     };
 
     const response = await callOpenRouterWithRetry(requestBody);
@@ -517,8 +633,8 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
       challengeMode: parsedResult.challengeMode,
       generalization: parsedResult.generalization || '',
       resources: {
-        youtubeLinks: parsedResult.resources?.youtubeLinks || [],
-        documentationLinks: parsedResult.resources?.documentationLinks || [],
+        youtubeLinks: validateYoutubeLinks(parsedResult.resources?.youtubeLinks || []),
+        documentationLinks: validateDocLinks(parsedResult.resources?.documentationLinks || [], detectedLang),
       },
       codeHealth,
       correctedCode: cleanedCorrectedCode,
@@ -529,8 +645,40 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     return NextResponse.json(result);
   } catch (error) {
     console.error('Debug API error:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Provide more specific error messages
+    if (errorMessage.includes('timeout')) {
+      return NextResponse.json(
+        { error: 'The code analysis is taking too long. Please try with smaller code or try again.' },
+        { status: 504 }
+      );
+    }
+    
+    if (errorMessage.includes('parse') || errorMessage.includes('JSON')) {
+      return NextResponse.json(
+        { error: 'Failed to process AI response. Please try again - the AI may have produced an invalid response.' },
+        { status: 500 }
+      );
+    }
+    
+    if (errorMessage.includes('Max retries')) {
+      return NextResponse.json(
+        { error: 'The AI service is currently busy. Please wait a moment and try again.' },
+        { status: 503 }
+      );
+    }
+    
+    if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+      return NextResponse.json(
+        { error: 'Network error occurred. Please check your connection and try again.' },
+        { status: 503 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to debug code. Please try again.' },
+      { error: 'Failed to debug code. Please try again. If the problem persists, try with smaller code.' },
       { status: 500 }
     );
   }

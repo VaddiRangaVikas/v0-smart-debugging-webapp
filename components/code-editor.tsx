@@ -110,6 +110,17 @@ export function CodeEditor({
   }, []);
 
   const lineCount = value.split('\n').length;
+  const charCount = value.length;
+  const isLargeCode = charCount > 10000;
+  const isVeryLargeCode = charCount > 30000;
+
+  // Format character count for display
+  const formatCharCount = (count: number) => {
+    if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}k`;
+    }
+    return count.toString();
+  };
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -121,7 +132,17 @@ export function CodeEditor({
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">Code Input</h3>
-            <p className="text-xs text-muted-foreground">{lineCount} lines</p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{lineCount} lines</span>
+              <span className="text-muted-foreground/50">|</span>
+              <span className={cn(
+                isVeryLargeCode ? 'text-red-400' : isLargeCode ? 'text-yellow-400' : ''
+              )}>
+                {formatCharCount(charCount)} chars
+                {isVeryLargeCode && ' (very large)'}
+                {isLargeCode && !isVeryLargeCode && ' (large)'}
+              </span>
+            </div>
           </div>
         </div>
         

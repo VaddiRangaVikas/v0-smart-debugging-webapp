@@ -90,10 +90,23 @@ export default function DebugAssistant() {
       return;
     }
 
+    // Warn about very large code but allow it
+    const lineCount = code.split('\n').length;
+    const charCount = code.length;
+    
+    if (charCount > 50000) {
+      setError('Code is very large (over 50,000 characters). Consider debugging smaller sections for faster and more accurate results.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
+      // Use AbortController for timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute client-side timeout
+
       const response = await fetch('/api/debug', {
         method: 'POST',
         headers: {
@@ -106,7 +119,10 @@ export default function DebugAssistant() {
           userLevel,
           learningMode,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
       
@@ -120,11 +136,22 @@ export default function DebugAssistant() {
       addToHistory(data);
     } catch (err) {
       console.error('Debug error:', err);
-      setError('Failed to connect to the AI service. Please check your connection and try again.');
+      
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Request timed out. The code might be too large. Please try with smaller code sections.');
+        } else if (err.message.includes('fetch') || err.message.includes('network')) {
+          setError('Network error. Please check your internet connection and try again.');
+        } else {
+          setError('Failed to connect to the AI service. Please try again in a moment.');
+        }
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [code, language, explanationLanguage, userLevel, learningMode]);
+  }, [code, language, explanationLanguage, userLevel, learningMode, addToHistory]);
 
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} duration={2500} />;
@@ -235,15 +262,15 @@ export default function DebugAssistant() {
                   className="relative flex-1 gap-2 overflow-hidden bg-primary text-primary-foreground transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,255,255,0.4)]"
                   size="lg"
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Analyzing Code...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="h-4 w-4" />
-                      <span>Debug Code</span>
+  {isLoading ? (
+  <>
+  <Loader2 className="h-4 w-4 animate-spin" />
+  <span>{code.length > 5000 ? 'Analyzing Large Code...' : 'Analyzing Code...'}</span>
+  </>
+  ) : (
+  <>
+  <Zap className="h-4 w-4" />
+  <span>Debug Code</span>
                     </>
                   )}
                   <div className="absolute inset-0 animate-shimmer" />
