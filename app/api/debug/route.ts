@@ -3,7 +3,7 @@ import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingL
 
 // Google Gemini API configuration (FREE tier: 15 RPM, 1500 RPD)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 // Call Google Gemini API with retry logic
 async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
