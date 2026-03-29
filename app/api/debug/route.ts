@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingLanguage } from '@/lib/types';
 
 // Google Gemini API configuration (FREE tier: 15 RPM, 1500 RPD)
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyAONj3Xu73BQCAFVQAJNfduS7zE28qBKxA';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 // Call Google Gemini API with retry logic
 async function callGeminiAPI(prompt: string, maxTokens: number = 4096): Promise<string> {
+  // Check if API key is configured
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not configured. Please add your Google Gemini API key.');
+  }
   const maxRetries = 3;
   let lastError: Error | null = null;
 
@@ -633,16 +637,24 @@ Respond ONLY with valid JSON (no markdown, no code blocks), following this exact
 
     return NextResponse.json(debugResult);
   } catch (error) {
-    console.error('Debug API error:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    if (errorMessage.includes('Invalid') && errorMessage.includes('API')) {
-      return NextResponse.json(
-        { error: 'API configuration error. Please try again or contact support.' },
-        { status: 401 }
-      );
-    }
+  console.error('Debug API error:', error);
+  
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  
+  // Handle missing API key
+  if (errorMessage.includes('GEMINI_API_KEY') || errorMessage.includes('not configured')) {
+  return NextResponse.json(
+  { error: 'API key not configured. Please add your GEMINI_API_KEY in the environment variables.' },
+  { status: 500 }
+  );
+  }
+  
+  if (errorMessage.includes('Invalid') && errorMessage.includes('API')) {
+  return NextResponse.json(
+  { error: 'Invalid API key. Please check your GEMINI_API_KEY is correct.' },
+  { status: 401 }
+  );
+  }
     
     if (errorMessage.includes('Rate limited')) {
       return NextResponse.json(
