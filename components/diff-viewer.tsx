@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Copy, Download, Check, Eye, Code2, Plus, Minus, GitCompare, AlertTriangle } from 'lucide-react';
+import { Copy, Download, Check, Eye, Code2, Plus, Minus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -45,11 +45,11 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
   const getDiffLineStyle = (type: DiffLine['type']) => {
     switch (type) {
       case 'added':
-        return 'bg-cyan-500/10 border-l-2 border-l-cyan-400';
+        return 'bg-cyan-500/15 border-l-4 border-l-cyan-400';
       case 'removed':
-        return 'bg-rose-500/10 border-l-2 border-l-rose-400';
+        return 'bg-red-500/15 border-l-4 border-l-red-500';
       case 'unchanged':
-        return 'bg-transparent border-l-2 border-l-transparent';
+        return 'bg-transparent border-l-4 border-l-transparent';
       default:
         return '';
     }
@@ -58,11 +58,11 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
   const getDiffIcon = (type: DiffLine['type']) => {
     switch (type) {
       case 'added':
-        return <Plus className="h-3 w-3 text-cyan-400" />;
+        return <Plus className="h-3.5 w-3.5 text-cyan-400 font-bold" />;
       case 'removed':
-        return <Minus className="h-3 w-3 text-rose-400" />;
+        return <Minus className="h-3.5 w-3.5 text-red-400 font-bold" />;
       default:
-        return <span className="w-3" />;
+        return <span className="w-3.5" />;
     }
   };
 
@@ -72,8 +72,8 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
       <Card className="h-full border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted/50">
-              <GitCompare className="h-3.5 w-3.5 text-muted-foreground" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/20">
+              <RefreshCw className="h-3.5 w-3.5 text-cyan-400" />
             </div>
             <span className="text-muted-foreground">Code Transformation</span>
           </CardTitle>
@@ -81,7 +81,7 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
         <CardContent className="flex h-[250px] flex-col items-center justify-center">
           <div className="relative mb-4 flex h-16 w-16 items-center justify-center">
             <div className="absolute inset-0 rounded-xl border-2 border-dashed border-border/50" />
-            <Code2 className="h-6 w-6 text-muted-foreground/50" />
+            <RefreshCw className="h-6 w-6 text-muted-foreground/50" />
           </div>
           <p className="text-sm font-medium text-muted-foreground">Waiting for Analysis</p>
           <p className="mt-1 text-xs text-muted-foreground/70">Run debugging to see code transformations</p>
@@ -267,17 +267,19 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
   // No changes and no errors - code is correct
   if (noChangesNeeded) {
     return (
-      <Card className="h-full border-green-500/30 bg-green-500/5 backdrop-blur-sm">
+      <Card className="h-full border-green-500/30 bg-card/50 backdrop-blur-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-500/20">
-              <Check className="h-3.5 w-3.5 text-green-400" />
-            </div>
-            <span className="text-green-400">Code Transformation</span>
-            <Badge variant="secondary" className="ml-2 bg-green-500/20 text-green-400">
-              No Changes
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-500/20">
+                <RefreshCw className="h-3.5 w-3.5 text-green-400" />
+              </div>
+              <span>Code Transformation</span>
+            </CardTitle>
+            <Badge variant="secondary" className="bg-green-500/20 text-green-400 border border-green-500/30">
+              No Changes Needed
             </Badge>
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="flex h-[250px] flex-col items-center justify-center">
           <div className="relative mb-4 flex h-16 w-16 items-center justify-center">
@@ -292,12 +294,12 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
   }
 
   return (
-    <Card className="flex h-full flex-col border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-primary/30 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
+    <Card className="flex h-full flex-col border-cyan-500/30 bg-card/50 backdrop-blur-sm transition-all hover:border-cyan-500/50 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-              <GitCompare className="h-3.5 w-3.5 text-primary" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/20">
+              <RefreshCw className="h-3.5 w-3.5 text-cyan-400" />
             </div>
             <span>Code Transformation</span>
           </CardTitle>
@@ -306,7 +308,7 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
               variant="outline"
               size="sm"
               onClick={handleCopy}
-              className="gap-1.5 border-border/50 bg-secondary/50 text-xs hover:border-primary/50 hover:bg-primary/10"
+              className="gap-1.5 border-border/50 bg-secondary/50 text-xs hover:border-cyan-500/50 hover:bg-cyan-500/10"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-cyan-400" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? 'Copied!' : 'Copy'}
@@ -315,7 +317,7 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
               variant="outline"
               size="sm"
               onClick={handleDownload}
-              className="gap-1.5 border-border/50 bg-secondary/50 text-xs hover:border-primary/50 hover:bg-primary/10"
+              className="gap-1.5 border-border/50 bg-secondary/50 text-xs hover:border-cyan-500/50 hover:bg-cyan-500/10"
             >
               <Download className="h-3.5 w-3.5" />
               Download
@@ -327,14 +329,14 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
         <div className="mt-3 flex flex-wrap gap-2">
           <Badge 
             variant="outline" 
-            className="gap-1.5 border-rose-500/30 bg-rose-500/10 text-rose-400"
+            className="gap-1.5 border-red-500/50 bg-red-500/20 text-red-400"
           >
             <Minus className="h-3 w-3" />
             <span>{removedLines} removed</span>
           </Badge>
           <Badge 
             variant="outline" 
-            className="gap-1.5 border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+            className="gap-1.5 border-cyan-500/50 bg-cyan-500/20 text-cyan-400"
           >
             <Plus className="h-3 w-3" />
             <span>{addedLines} added</span>
@@ -351,19 +353,19 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
       <CardContent className="flex-1 overflow-hidden p-0">
         <Tabs value={view} onValueChange={(v) => setView(v as 'diff' | 'clean')} className="flex h-full flex-col">
           <div className="border-b border-border/30 px-4">
-            <TabsList className="h-9 bg-transparent p-0">
+            <TabsList className="h-10 bg-transparent p-0 gap-4">
               <TabsTrigger
                 value="diff"
-                className="gap-1.5 rounded-none border-b-2 border-b-transparent px-4 text-xs data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:text-primary"
+                className="gap-2 rounded-none border-b-2 border-b-transparent px-3 py-2 text-xs font-medium data-[state=active]:border-b-cyan-400 data-[state=active]:bg-transparent data-[state=active]:text-cyan-400"
               >
-                <Eye className="h-3.5 w-3.5" />
+                <Eye className="h-4 w-4" />
                 Diff View
               </TabsTrigger>
               <TabsTrigger
                 value="clean"
-                className="gap-1.5 rounded-none border-b-2 border-b-transparent px-4 text-xs data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:text-primary"
+                className="gap-2 rounded-none border-b-2 border-b-transparent px-3 py-2 text-xs font-medium data-[state=active]:border-b-cyan-400 data-[state=active]:bg-transparent data-[state=active]:text-cyan-400"
               >
-                <Code2 className="h-3.5 w-3.5" />
+                <Code2 className="h-4 w-4" />
                 Clean Code
               </TabsTrigger>
             </TabsList>
@@ -376,23 +378,26 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
                   <div
                     key={i}
                     className={cn(
-                      'flex items-start gap-2 px-4 py-0.5 transition-colors',
-                      getDiffLineStyle(line.type),
-                      line.type === 'added' && 'animate-[pulse_2s_ease-in-out_1]',
-                      line.type === 'removed' && 'opacity-60'
+                      'flex items-start gap-1 px-2 py-1 transition-colors min-h-[24px]',
+                      getDiffLineStyle(line.type)
                     )}
                   >
-                    <span className="flex w-5 shrink-0 items-center justify-center">
+                    <span className="flex w-6 shrink-0 items-center justify-center">
                       {getDiffIcon(line.type)}
                     </span>
-                    <span className="w-8 shrink-0 text-right text-muted-foreground/40 select-none">
+                    <span className={cn(
+                      "w-10 shrink-0 text-right select-none pr-2",
+                      line.type === 'removed' && 'text-red-400/70',
+                      line.type === 'added' && 'text-cyan-400/70',
+                      line.type === 'unchanged' && 'text-muted-foreground/40'
+                    )}>
                       {line.lineNumber}
                     </span>
                     <span
                       className={cn(
                         'flex-1 whitespace-pre-wrap break-all',
-                        line.type === 'removed' && 'text-rose-400 line-through',
-                        line.type === 'added' && 'text-cyan-400'
+                        line.type === 'removed' && 'text-red-400 line-through decoration-red-500/50',
+                        line.type === 'added' && 'text-cyan-400 font-medium'
                       )}
                     >
                       {line.content || ' '}
@@ -405,18 +410,20 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
 
           <TabsContent value="clean" className="m-0 flex-1 overflow-hidden">
             <ScrollArea className="h-full">
-              <div className="flex">
-                {/* Line numbers */}
-                <div className="flex flex-col border-r border-border/30 bg-muted/20 px-3 py-4 font-mono text-xs text-muted-foreground/40 select-none">
-                  {correctedCode.split('\n').map((_, i) => (
-                    <span key={i} className="leading-5 text-right min-w-[2ch]">
+              <div className="font-mono text-xs">
+                {correctedCode.split('\n').map((line, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-1 px-2 py-1 min-h-[24px] hover:bg-cyan-500/5 transition-colors"
+                  >
+                    <span className="w-10 shrink-0 text-right text-cyan-400/50 select-none pr-2">
                       {i + 1}
                     </span>
-                  ))}
-                </div>
-                <pre className="flex-1 p-4 font-mono text-xs leading-5">
-                  <code className="text-foreground">{correctedCode}</code>
-                </pre>
+                    <span className="flex-1 whitespace-pre-wrap break-all text-foreground">
+                      {line || ' '}
+                    </span>
+                  </div>
+                ))}
               </div>
             </ScrollArea>
           </TabsContent>
