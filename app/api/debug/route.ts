@@ -4,6 +4,134 @@ import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingL
 const OPENROUTER_API_KEY = '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';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Function to repair truncated JSON responses
+function repairTruncatedJSON(jsonString: string): Record<string, unknown> {
+  let str = jsonString.trim();
+  
+  // Try to find the last complete key-value pair
+  // Remove trailing incomplete content after the last complete string value
+  
+  // Find if we're in the middle of a string value (truncated)
+  const lastQuoteIndex = str.lastIndexOf('"');
+  const lastColonBeforeQuote = str.lastIndexOf(':', lastQuoteIndex);
+  const lastCommaBeforeQuote = str.lastIndexOf(',', lastQuoteIndex);
+  
+  // If the JSON is truncated in the middle of a string value
+  if (lastQuoteIndex > 0) {
+    // Check if we have an unclosed string (odd number of unescaped quotes after last key)
+    const afterLastKey = str.slice(Math.max(lastColonBeforeQuote, lastCommaBeforeQuote));
+    const quoteMatches = afterLastKey.match(/(?<!\\)"/g);
+    
+    if (quoteMatches && quoteMatches.length % 2 !== 0) {
+      // We have an unclosed string, close it
+      str = str + '"';
+    }
+  }
+  
+  // Try to close any unclosed brackets/braces
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let prevChar = '';
+  
+  for (const char of str) {
+    if (char === '"' && prevChar !== '\\') {
+      inString = !inString;
+    }
+    if (!inString) {
+      if (char === '{') openBraces++;
+      if (char === '}') openBraces--;
+      if (char === '[') openBrackets++;
+      if (char === ']') openBrackets--;
+    }
+    prevChar = char;
+  }
+  
+  // Remove any trailing incomplete parts (like "key": or "key": "incomplete...)
+  // Find the last complete value
+  let lastValidEnd = str.length;
+  for (let i = str.length - 1; i >= 0; i--) {
+    const char = str[i];
+    if (char === ',' || char === '{' || char === '[') {
+      // Check if what follows looks like an incomplete key-value
+      const remainder = str.slice(i + 1).trim();
+      if (remainder.match(/^"[^"]*"?\s*:?\s*"?[^"{}[\],]*\.\.\.?$/)) {
+        // This looks like truncated content, remove it
+        lastValidEnd = i + 1;
+        // Remove trailing comma if present
+        if (char === ',') lastValidEnd = i;
+        break;
+      }
+    }
+    // If we find a complete value ending, stop
+    if (char === '"' || char === '}' || char === ']' || /\d/.test(char) || char === 'e' || char === 'l') {
+      break;
+    }
+  }
+  
+  str = str.slice(0, lastValidEnd).trim();
+  
+  // Remove trailing commas before closing
+  str = str.replace(/,\s*$/, '');
+  
+  // Close unclosed structures
+  str += ']'.repeat(Math.max(0, openBrackets));
+  str += '}'.repeat(Math.max(0, openBraces));
+  
+  try {
+    return JSON.parse(str);
+  } catch {
+    // If still failing, try a more aggressive approach
+    // Find the last successfully parseable portion
+    for (let i = str.length; i > 100; i -= 50) {
+      let testStr = str.slice(0, i);
+      // Count and close brackets/braces
+      let braces = 0, brackets = 0;
+      let inStr = false;
+      let prev = '';
+      for (const c of testStr) {
+        if (c === '"' && prev !== '\\') inStr = !inStr;
+        if (!inStr) {
+          if (c === '{') braces++;
+          if (c === '}') braces--;
+          if (c === '[') brackets++;
+          if (c === ']') brackets--;
+        }
+        prev = c;
+      }
+      
+      // Remove trailing incomplete content
+      testStr = testStr.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+      testStr = testStr.replace(/,\s*$/, '');
+      
+      // Recount after cleanup
+      braces = 0; brackets = 0; inStr = false; prev = '';
+      for (const c of testStr) {
+        if (c === '"' && prev !== '\\') inStr = !inStr;
+        if (!inStr) {
+          if (c === '{') braces++;
+          if (c === '}') braces--;
+          if (c === '[') brackets++;
+          if (c === ']') brackets--;
+        }
+        prev = c;
+      }
+      
+      testStr += ']'.repeat(Math.max(0, brackets));
+      testStr += '}'.repeat(Math.max(0, braces));
+      
+      try {
+        return JSON.parse(testStr);
+      } catch {
+        continue;
+      }
+    }
+    
+    // If all else fails, return a minimal valid object
+    throw new Error('Unable to repair JSON');
+  }
+}
+
 async function callOpenRouterWithRetry(body: object, retries = 3): Promise<Response> {
   for (let i = 0; i < retries; i++) {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -503,14 +631,29 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     try {
       parsedResult = JSON.parse(cleanedContent);
     } catch {
-      console.error('Failed to parse OpenRouter response:', cleanedContent);
-      throw new Error('Failed to parse AI response');
+      // Try to repair truncated JSON
+      console.log('[v0] Attempting to repair truncated JSON response');
+      try {
+        parsedResult = repairTruncatedJSON(cleanedContent);
+      } catch {
+        console.error('Failed to parse or repair OpenRouter response:', cleanedContent.slice(0, 500) + '...');
+        throw new Error('Failed to parse AI response');
+      }
     }
 
     const codeHealth = calculateCodeHealth(parsedResult.errors || []);
     
     // Clean the corrected code to remove markdown formatting
-    const cleanedCorrectedCode = cleanCorrectedCode(parsedResult.correctedCode || code);
+    // If correctedCode is truncated (ends with ... or is much shorter than original), use original code
+    let correctedCodeRaw = parsedResult.correctedCode || code;
+    if (typeof correctedCodeRaw === 'string' && 
+        (correctedCodeRaw.endsWith('...') || 
+         correctedCodeRaw.endsWith('..') ||
+         (correctedCodeRaw.length < code.length * 0.5 && code.length > 100))) {
+      console.log('[v0] Corrected code appears truncated, using original code');
+      correctedCodeRaw = code;
+    }
+    const cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
     const diffView = generateDiff(code, cleanedCorrectedCode);
 
     const result: DebugResult = {
