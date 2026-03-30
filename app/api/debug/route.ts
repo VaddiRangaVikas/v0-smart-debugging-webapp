@@ -8,117 +8,91 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 function repairTruncatedJSON(jsonString: string): Record<string, unknown> {
   let str = jsonString.trim();
   
-  // Try to find the last complete key-value pair
-  // Remove trailing incomplete content after the last complete string value
-  
-  // Find if we're in the middle of a string value (truncated)
-  const lastQuoteIndex = str.lastIndexOf('"');
-  const lastColonBeforeQuote = str.lastIndexOf(':', lastQuoteIndex);
-  const lastCommaBeforeQuote = str.lastIndexOf(',', lastQuoteIndex);
-  
-  // If the JSON is truncated in the middle of a string value
-  if (lastQuoteIndex > 0) {
-    // Check if we have an unclosed string (odd number of unescaped quotes after last key)
-    const afterLastKey = str.slice(Math.max(lastColonBeforeQuote, lastCommaBeforeQuote));
-    const quoteMatches = afterLastKey.match(/(?<!\\)"/g);
-    
-    if (quoteMatches && quoteMatches.length % 2 !== 0) {
-      // We have an unclosed string, close it
-      str = str + '"';
-    }
-  }
-  
-  // Try to close any unclosed brackets/braces
-  let openBraces = 0;
-  let openBrackets = 0;
-  let inString = false;
-  let prevChar = '';
-  
-  for (const char of str) {
-    if (char === '"' && prevChar !== '\\') {
-      inString = !inString;
-    }
-    if (!inString) {
-      if (char === '{') openBraces++;
-      if (char === '}') openBraces--;
-      if (char === '[') openBrackets++;
-      if (char === ']') openBrackets--;
-    }
-    prevChar = char;
-  }
-  
-  // Remove any trailing incomplete parts (like "key": or "key": "incomplete...)
-  // Find the last complete value
-  let lastValidEnd = str.length;
-  for (let i = str.length - 1; i >= 0; i--) {
-    const char = str[i];
-    if (char === ',' || char === '{' || char === '[') {
-      // Check if what follows looks like an incomplete key-value
-      const remainder = str.slice(i + 1).trim();
-      if (remainder.match(/^"[^"]*"?\s*:?\s*"?[^"{}[\],]*\.\.\.?$/)) {
-        // This looks like truncated content, remove it
-        lastValidEnd = i + 1;
-        // Remove trailing comma if present
-        if (char === ',') lastValidEnd = i;
+  // First, try to find and fix common truncation patterns
+  // Pattern 1: Truncated in the middle of "correctedCode" string value
+  const correctedCodeMatch = str.match(/"correctedCode"\s*:\s*"/);
+  if (correctedCodeMatch) {
+    const startIdx = correctedCodeMatch.index! + correctedCodeMatch[0].length;
+    // Find if the correctedCode value is properly closed
+    let inEscape = false;
+    let foundEnd = false;
+    for (let i = startIdx; i < str.length; i++) {
+      if (inEscape) {
+        inEscape = false;
+        continue;
+      }
+      if (str[i] === '\\') {
+        inEscape = true;
+        continue;
+      }
+      if (str[i] === '"') {
+        foundEnd = true;
         break;
       }
     }
-    // If we find a complete value ending, stop
-    if (char === '"' || char === '}' || char === ']' || /\d/.test(char) || char === 'e' || char === 'l') {
-      break;
+    if (!foundEnd) {
+      // correctedCode is truncated, close it and the object
+      str = str + '"}}';
     }
   }
+
+  // Helper function to count brackets
+  const countBrackets = (s: string) => {
+    let braces = 0, brackets = 0, inString = false, prev = '';
+    for (const c of s) {
+      if (c === '"' && prev !== '\\') inString = !inString;
+      if (!inString) {
+        if (c === '{') braces++;
+        if (c === '}') braces--;
+        if (c === '[') brackets++;
+        if (c === ']') brackets--;
+      }
+      prev = c;
+    }
+    return { braces, brackets, inString };
+  };
+
+  // Check current state
+  let state = countBrackets(str);
   
-  str = str.slice(0, lastValidEnd).trim();
+  // If we're in an unclosed string, close it
+  if (state.inString) {
+    str = str + '"';
+    state = countBrackets(str);
+  }
   
-  // Remove trailing commas before closing
+  // Remove trailing incomplete content
   str = str.replace(/,\s*$/, '');
+  str = str.replace(/,\s*"[^"]*"?\s*:?\s*$/, ''); // Remove incomplete key-value
+  str = str.replace(/:\s*$/, '": ""'); // Fix trailing colon
+  
+  // Recount after cleanup
+  state = countBrackets(str);
   
   // Close unclosed structures
-  str += ']'.repeat(Math.max(0, openBrackets));
-  str += '}'.repeat(Math.max(0, openBraces));
+  str += ']'.repeat(Math.max(0, state.brackets));
+  str += '}'.repeat(Math.max(0, state.braces));
   
   try {
     return JSON.parse(str);
   } catch {
-    // If still failing, try a more aggressive approach
-    // Find the last successfully parseable portion
-    for (let i = str.length; i > 100; i -= 50) {
+    // More aggressive repair: find last valid JSON position
+    for (let i = str.length; i > 100; i -= 20) {
       let testStr = str.slice(0, i);
-      // Count and close brackets/braces
-      let braces = 0, brackets = 0;
-      let inStr = false;
-      let prev = '';
-      for (const c of testStr) {
-        if (c === '"' && prev !== '\\') inStr = !inStr;
-        if (!inStr) {
-          if (c === '{') braces++;
-          if (c === '}') braces--;
-          if (c === '[') brackets++;
-          if (c === ']') brackets--;
-        }
-        prev = c;
-      }
       
-      // Remove trailing incomplete content
+      // Clean up potential truncation points
       testStr = testStr.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
       testStr = testStr.replace(/,\s*$/, '');
       
-      // Recount after cleanup
-      braces = 0; brackets = 0; inStr = false; prev = '';
-      for (const c of testStr) {
-        if (c === '"' && prev !== '\\') inStr = !inStr;
-        if (!inStr) {
-          if (c === '{') braces++;
-          if (c === '}') braces--;
-          if (c === '[') brackets++;
-          if (c === ']') brackets--;
-        }
-        prev = c;
+      const testState = countBrackets(testStr);
+      
+      if (testState.inString) {
+        testStr += '"';
       }
       
-      testStr += ']'.repeat(Math.max(0, brackets));
-      testStr += '}'.repeat(Math.max(0, braces));
+      const finalState = countBrackets(testStr);
+      testStr += ']'.repeat(Math.max(0, finalState.brackets));
+      testStr += '}'.repeat(Math.max(0, finalState.braces));
       
       try {
         return JSON.parse(testStr);
@@ -127,7 +101,6 @@ function repairTruncatedJSON(jsonString: string): Record<string, unknown> {
       }
     }
     
-    // If all else fails, return a minimal valid object
     throw new Error('Unable to repair JSON');
   }
 }
