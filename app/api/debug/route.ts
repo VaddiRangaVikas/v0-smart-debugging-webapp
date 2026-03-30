@@ -508,115 +508,57 @@ export async function POST(request: NextRequest) {
     const codeLength = codeLines.length;
     const isLongCode = codeLength > 50;
 
-    const prompt = `You are an EXPERT AI debugging assistant with deep knowledge of compilers, interpreters, and code analysis. Perform COMPREHENSIVE analysis of the following ${detectedLang} code.
+    const prompt = `You are an AI code debugger. Analyze this ${detectedLang} code for ACTUAL CODE ERRORS ONLY.
 
-CRITICAL: FOCUS ONLY ON CODE ERRORS - NOT STRING CONTENT
-- ONLY detect errors in ACTUAL CODE: syntax, logic, function calls, variable usage, operators, control flow
-- DO NOT flag spelling/grammar issues inside strings like printf("mesage") or comments
-- DO NOT flag typos in string literals - they are intentional text, not code errors
-- ONLY flag issues that would cause compilation errors, runtime crashes, or incorrect program behavior
+IMPORTANT RULES:
+- ONLY flag errors that cause: compilation failure, runtime crash, or wrong output
+- DO NOT flag: spelling in strings, grammar in comments, coding style preferences
+- If code is CORRECT, return empty "errors" array
 
-ANALYSIS PASSES (${codeLength} lines):
-- Pass 1: SYNTAX - Missing/extra brackets, parentheses, semicolons, quotes, invalid keywords
-- Pass 2: VARIABLES - Undeclared variables, uninitialized use, scope errors, wrong types
-- Pass 3: FUNCTIONS - Missing return, wrong parameters, undefined functions, incorrect calls
-- Pass 4: LOGIC - Off-by-one errors, wrong operators (= vs ==), incorrect conditions, infinite loops
-- Pass 5: MEMORY - Null/dangling pointers, buffer overflow, memory leaks, unallocated access
-- Pass 6: RUNTIME - Division by zero, array out of bounds, null dereference, type errors
-- Pass 7: SECURITY - Buffer overflow vulnerabilities, input validation issues
-- Pass 8: BEST PRACTICES - Only if code compiles but has potential issues
-
-CODE TO DEBUG (${codeLength} lines):
+CODE (${codeLength} lines):
 \`\`\`${detectedLang}
 ${code}
 \`\`\`
 
-USER LEVEL: ${userLevel}
-EXPLANATION LANGUAGE: ${explanationLanguage}
-LEARNING MODE: ${learningMode}
-
-Provide your response in the following JSON format (respond ONLY with valid JSON, no markdown):
+Respond with ONLY this JSON (no markdown):
 {
-  "intent": "What the code is trying to accomplish",
-  "actualBehavior": "What the code actually does (including edge cases)",
-  "error": "Primary error description (or 'No errors found. Code is correct and well-written.' if perfect)",
-  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language with analogies, avoid jargon' : userLevel === 'intermediate' ? 'Use technical terms with clear explanations' : 'Deep technical explanation with compiler/interpreter-level reasoning, memory layout, and CPU considerations'}",
-  "rootCause": "The fundamental reason for the error at the code/compiler level",
+  "intent": "Brief description of what code does",
+  "actualBehavior": "What it actually does",
+  "error": "Main error OR 'No errors found. Code is correct.'",
+  "explanation": "${userLevel === 'beginner' ? 'Simple explanation' : userLevel === 'intermediate' ? 'Technical explanation' : 'Advanced technical explanation'}",
+  "rootCause": "Why error occurs",
   "learning": {
-    "whyItHappened": "Why this error occurred - technical reasoning",
-    "whenItHappens": "Common scenarios and patterns where this error occurs",
-    "howToAvoid": "Best practices, design patterns, and defensive coding techniques",
-    "concept": "The underlying CS concept (data structures, algorithms, memory model, etc.)"
+    "whyItHappened": "Cause",
+    "whenItHappens": "Common scenarios",
+    "howToAvoid": "Prevention tips",
+    "concept": "Related concept"
   },
-  "mentalModel": "An analogy or mental model to understand this better",
-  "teacherMode": "Step-by-step teaching explanation with examples and analogies",
-  "thinkMode": "Socratic questions to guide the user to understand the error themselves",
-  "conceptBuilder": "Focus on the core concept behind the error with visual explanations",
-  "debugTrace": "Step-by-step execution flow showing what happens at each line with variable values and memory state",
-  "interviewMode": "How to explain this in a technical interview - what interviewers look for",
-  "challengeMode": "Progressive hints for the user to solve it themselves (3 levels of hints)",
-  "generalization": "How this error pattern applies to other languages, scenarios, and real-world systems",
-  "codeQuality": {
-    "maintainability": "Assessment of code maintainability (1-10)",
-    "readability": "Assessment of code readability (1-10)",
-    "efficiency": "Assessment of code efficiency (1-10)",
-    "suggestions": ["List of improvement suggestions beyond bug fixes"]
-  },
+  "mentalModel": "Simple analogy",
+  "teacherMode": "Step-by-step teaching",
+  "thinkMode": "Guiding questions",
+  "conceptBuilder": "Core concept explanation",
+  "debugTrace": "Execution trace",
+  "interviewMode": "Interview explanation",
+  "challengeMode": "Hints without answer",
+  "generalization": "How pattern applies elsewhere",
   "resources": {
-    "youtubeSearchQueries": ["2-4 specific YouTube SEARCH QUERIES for tutorials"],
-    "documentationLinks": ["Official documentation links"],
-    "relatedPatterns": ["Related design patterns or algorithms to study"]
+    "youtubeSearchQueries": ["search terms"],
+    "documentationLinks": ["doc links"]
   },
   "errors": [
-    {
-      "type": "syntax|runtime|logical|warning|bad_practice|security|performance|memory|type_error|null_reference|boundary|concurrency|resource_leak",
-      "severity": "critical|high|medium|low|info",
-      "line": <exact line number>,
-      "column": <optional column number>,
-      "message": "detailed error description",
-      "fix": "the corrected version of this line",
-      "suggestion": "additional improvement suggestion",
-      "category": "category grouping (e.g., Memory Management, Input Validation)",
-      "impact": "what happens if this is not fixed"
-    }
+    {"type": "syntax|runtime|logical|memory|security", "severity": "critical|high|medium|low", "line": <number>, "message": "error description", "fix": "corrected line"}
   ],
-  "correctedCode": "The COMPLETE fixed version of the code - ALL ${codeLength} lines with corrections"
+  "correctedCode": "COMPLETE fixed code - all ${codeLength} lines"
 }
 
-CRITICAL REQUIREMENTS:
-1. ONLY DETECT ACTUAL CODE ERRORS (NOT string content or comments):
-   - syntax: Missing brackets {}, parentheses (), semicolons ;, mismatched quotes
-   - runtime: Null pointer dereference, array index out of bounds, division by zero
-   - logical: Wrong comparison (= instead of ==), off-by-one in loops, incorrect boolean logic
-   - type_error: Assigning wrong type, invalid function arguments, type mismatch
-   - null_reference: Using pointer/variable before initialization, accessing freed memory
-   - boundary: Array access beyond allocated size, buffer overflow, integer overflow
-   - memory: malloc without free, use after free, dangling pointers, memory leaks
-   
-2. DO NOT FLAG AS ERRORS:
-   - Spelling mistakes inside strings: printf("helo") is NOT an error
-   - Grammar issues in comments: // this function do thing is NOT an error
-   - Variable names that look like typos but are valid identifiers
-   - String content formatting or wording choices
-   - security: SQL injection, command injection, buffer overflow exploits
-   - performance: O(n^2) when O(n) possible, unnecessary recomputation
-   - concurrency: Race conditions, deadlocks, unsynchronized access
-   - resource_leak: Unclosed files/sockets, unreleased locks
-   - warning: Deprecated API usage, potential issues
-   - bad_practice: Actual code issues like magic numbers in logic, not string content
+ERROR TYPES TO DETECT:
+- syntax: Missing brackets, semicolons, invalid syntax
+- runtime: Null pointer, array bounds, division by zero
+- logical: Wrong operator (= vs ==), off-by-one, bad conditions
+- memory: Memory leak, dangling pointer, buffer overflow
+- security: Injection vulnerabilities
 
-3. SEVERITY LEVELS:
-   - critical: Code will crash or has severe security vulnerability
-   - high: Significant bug or security issue
-   - medium: Bug that affects some functionality
-   - low: Minor issue or potential problem
-   - info: Suggestion for improvement
-
-3. The "errors" array MUST include ALL issues with EXACT line numbers (1-indexed).
-4. The "correctedCode" MUST be COMPLETE - never truncate.
-5. If code is PERFECT (no actual code errors), return empty errors array and say "No errors found. Code is correct."
-6. REMEMBER: Strings like printf("wrng speling") are NOT errors - only CODE structure matters.
-7. Focus on errors that would cause: compilation failure, runtime crash, incorrect output, or security vulnerability.
+IF CODE IS CORRECT: Set "errors": [] and "error": "No errors found. Code is correct."
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
@@ -709,11 +651,26 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
       }
     }
 
-    const codeHealth = calculateCodeHealth(parsedResult.errors || []);
     const errors = parsedResult.errors || [];
+    
+    // Check if there are any real code errors (not just warnings/suggestions)
+    const realErrorTypes = ['syntax', 'runtime', 'logical', 'memory', 'security', 'type_error', 'null_reference', 'boundary'];
     const hasRealErrors = errors.length > 0 && errors.some((e: { type: string }) => 
-      e.type === 'syntax' || e.type === 'runtime' || e.type === 'logical'
+      realErrorTypes.includes(e.type)
     );
+    
+    // Also check the error message for "no errors" indication
+    const errorMessage = (parsedResult.error || '').toLowerCase();
+    const isCodeCorrect = !hasRealErrors || 
+      errorMessage.includes('no error') || 
+      errorMessage.includes('code is correct') ||
+      errorMessage.includes('no issues') ||
+      errors.length === 0;
+    
+    // Calculate code health - force 100 if code is correct
+    const codeHealth = isCodeCorrect 
+      ? { score: 100, correct: 100, errors: 0, warnings: 0, optimizations: 0, grade: 'A' as const }
+      : calculateCodeHealth(errors);
     
     // Clean the corrected code to remove markdown formatting
     // If correctedCode is truncated, try to generate diff from error information
@@ -731,8 +688,17 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     let cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
     let diffView: DiffLine[];
     
+    // If code is correct, don't generate any diff - just use original code
+    if (isCodeCorrect) {
+      cleanedCorrectedCode = code;
+      diffView = code.split('\n').map((line, i) => ({
+        type: 'unchanged' as const,
+        content: line,
+        lineNumber: i + 1
+      }));
+    }
     // If truncated but we have errors, generate a diff based on error lines with their fixes
-    if (isTruncated && hasRealErrors) {
+    else if (isTruncated && hasRealErrors) {
       console.log('[v0] Generating diff from error information with fixes');
       
       // Create a map of line numbers to their fixes
