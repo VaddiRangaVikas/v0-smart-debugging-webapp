@@ -88,7 +88,8 @@ export interface DebugResult {
   challengeMode?: string;
   generalization: string;
   resources: {
-    youtubeLinks: string[];
+    youtubeLinks?: string[];
+    youtubeSearchQueries?: string[];
     documentationLinks: string[];
   };
   codeHealth: CodeHealthScore;

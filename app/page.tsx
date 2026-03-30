@@ -84,8 +84,16 @@ export default function DebugAssistant() {
     setHistory(prev => prev.filter(item => item.id !== id));
   }, []);
 
-  const handleDebug = useCallback(async () => {
-    if (!code.trim()) {
+  // Function to debug with specific parameters (used for re-analysis with new settings)
+  const debugWithParams = useCallback(async (params: {
+    code: string;
+    language: ProgrammingLanguage;
+    explanationLanguage: ExplanationLanguage;
+    userLevel: UserLevel;
+    learningMode: LearningMode;
+    skipHistory?: boolean;
+  }) => {
+    if (!params.code.trim()) {
       setError('Please enter some code to debug');
       return;
     }
@@ -100,31 +108,87 @@ export default function DebugAssistant() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code,
-          language,
-          explanationLanguage,
-          userLevel,
-          learningMode,
+          code: params.code,
+          language: params.language,
+          explanationLanguage: params.explanationLanguage,
+          userLevel: params.userLevel,
+          learningMode: params.learningMode,
         }),
       });
 
       const data = await response.json();
       
       if (!response.ok) {
-        // Handle specific error messages from the API
         setError(data.error || 'Failed to debug code. Please try again.');
         return;
       }
 
       setResult(data);
-      addToHistory(data);
+      if (!params.skipHistory) {
+        addToHistory(data);
+      }
     } catch (err) {
       console.error('Debug error:', err);
       setError('Failed to connect to the AI service. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [code, language, explanationLanguage, userLevel, learningMode]);
+  }, [addToHistory]);
+
+  const handleDebug = useCallback(async () => {
+    await debugWithParams({
+      code,
+      language,
+      explanationLanguage,
+      userLevel,
+      learningMode,
+      skipHistory: false,
+    });
+  }, [code, language, explanationLanguage, userLevel, learningMode, debugWithParams]);
+
+  // Re-analyze when language changes after having results - pass the NEW language directly
+  const handleExplanationLanguageChange = useCallback((newLang: ExplanationLanguage) => {
+    setExplanationLanguage(newLang);
+    if (result && code.trim()) {
+      // Pass the NEW language value directly to avoid closure issues
+      debugWithParams({
+        code,
+        language,
+        explanationLanguage: newLang, // Use the new value directly
+        userLevel,
+        learningMode,
+        skipHistory: true,
+      });
+    }
+  }, [result, code, language, userLevel, learningMode, debugWithParams]);
+
+  const handleLearningModeChange = useCallback((newMode: LearningMode) => {
+    setLearningMode(newMode);
+    if (result && code.trim()) {
+      debugWithParams({
+        code,
+        language,
+        explanationLanguage,
+        userLevel,
+        learningMode: newMode, // Use the new value directly
+        skipHistory: true,
+      });
+    }
+  }, [result, code, language, explanationLanguage, userLevel, debugWithParams]);
+
+  const handleUserLevelChange = useCallback((newLevel: UserLevel) => {
+    setUserLevel(newLevel);
+    if (result && code.trim()) {
+      debugWithParams({
+        code,
+        language,
+        explanationLanguage,
+        userLevel: newLevel, // Use the new value directly
+        learningMode,
+        skipHistory: true,
+      });
+    }
+  }, [result, code, language, explanationLanguage, learningMode, debugWithParams]);
 
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} duration={2500} />;
@@ -174,9 +238,9 @@ export default function DebugAssistant() {
               learningMode={learningMode}
               detectedLanguage={result?.detectedLanguage}
               onLanguageChange={setLanguage}
-              onExplanationLanguageChange={setExplanationLanguage}
-              onUserLevelChange={setUserLevel}
-              onLearningModeChange={setLearningMode}
+              onExplanationLanguageChange={handleExplanationLanguageChange}
+              onUserLevelChange={handleUserLevelChange}
+              onLearningModeChange={handleLearningModeChange}
             />
           </div>
         </div>

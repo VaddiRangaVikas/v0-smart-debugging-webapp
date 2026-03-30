@@ -4,6 +4,107 @@ import type { DebugRequest, DebugResult, DiffLine, CodeHealthScore, ProgrammingL
 const OPENROUTER_API_KEY = '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';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Function to repair truncated JSON responses
+function repairTruncatedJSON(jsonString: string): Record<string, unknown> {
+  let str = jsonString.trim();
+  
+  // First, try to find and fix common truncation patterns
+  // Pattern 1: Truncated in the middle of "correctedCode" string value
+  const correctedCodeMatch = str.match(/"correctedCode"\s*:\s*"/);
+  if (correctedCodeMatch) {
+    const startIdx = correctedCodeMatch.index! + correctedCodeMatch[0].length;
+    // Find if the correctedCode value is properly closed
+    let inEscape = false;
+    let foundEnd = false;
+    for (let i = startIdx; i < str.length; i++) {
+      if (inEscape) {
+        inEscape = false;
+        continue;
+      }
+      if (str[i] === '\\') {
+        inEscape = true;
+        continue;
+      }
+      if (str[i] === '"') {
+        foundEnd = true;
+        break;
+      }
+    }
+    if (!foundEnd) {
+      // correctedCode is truncated, close it and the object
+      str = str + '"}}';
+    }
+  }
+
+  // Helper function to count brackets
+  const countBrackets = (s: string) => {
+    let braces = 0, brackets = 0, inString = false, prev = '';
+    for (const c of s) {
+      if (c === '"' && prev !== '\\') inString = !inString;
+      if (!inString) {
+        if (c === '{') braces++;
+        if (c === '}') braces--;
+        if (c === '[') brackets++;
+        if (c === ']') brackets--;
+      }
+      prev = c;
+    }
+    return { braces, brackets, inString };
+  };
+
+  // Check current state
+  let state = countBrackets(str);
+  
+  // If we're in an unclosed string, close it
+  if (state.inString) {
+    str = str + '"';
+    state = countBrackets(str);
+  }
+  
+  // Remove trailing incomplete content
+  str = str.replace(/,\s*$/, '');
+  str = str.replace(/,\s*"[^"]*"?\s*:?\s*$/, ''); // Remove incomplete key-value
+  str = str.replace(/:\s*$/, '": ""'); // Fix trailing colon
+  
+  // Recount after cleanup
+  state = countBrackets(str);
+  
+  // Close unclosed structures
+  str += ']'.repeat(Math.max(0, state.brackets));
+  str += '}'.repeat(Math.max(0, state.braces));
+  
+  try {
+    return JSON.parse(str);
+  } catch {
+    // More aggressive repair: find last valid JSON position
+    for (let i = str.length; i > 100; i -= 20) {
+      let testStr = str.slice(0, i);
+      
+      // Clean up potential truncation points
+      testStr = testStr.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+      testStr = testStr.replace(/,\s*$/, '');
+      
+      const testState = countBrackets(testStr);
+      
+      if (testState.inString) {
+        testStr += '"';
+      }
+      
+      const finalState = countBrackets(testStr);
+      testStr += ']'.repeat(Math.max(0, finalState.brackets));
+      testStr += '}'.repeat(Math.max(0, finalState.braces));
+      
+      try {
+        return JSON.parse(testStr);
+      } catch {
+        continue;
+      }
+    }
+    
+    throw new Error('Unable to repair JSON');
+  }
+}
+
 async function callOpenRouterWithRetry(body: object, retries = 3): Promise<Response> {
   for (let i = 0; i < retries; i++) {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -407,7 +508,7 @@ Please provide your response in the following JSON format (respond ONLY with val
   "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
   "generalization": "How this error pattern applies to other scenarios",
   "resources": {
-    "youtubeLinks": ["MUST provide 2-5 REAL, WORKING YouTube video URLs that teach the specific concept/error found in this code. Use actual YouTube URLs in format https://www.youtube.com/watch?v=VIDEOID - search for popular programming tutorials related to the specific error type and language"],
+    "youtubeSearchQueries": ["Provide 2-4 specific YouTube SEARCH QUERIES (not URLs) that would help find tutorials for this error. Example: 'Python function return statement tutorial', 'C binary search tree implementation'"],
     "documentationLinks": ["Official documentation links for the programming language related to this error"]
   },
   "errors": [
@@ -419,7 +520,7 @@ Please provide your response in the following JSON format (respond ONLY with val
 CRITICAL REQUIREMENTS:
 1. The "errors" array MUST include ALL errors found in the code with their EXACT line numbers (1-indexed).
 2. The "correctedCode" MUST be the COMPLETE fixed code - do NOT truncate or abbreviate it.
-3. For "youtubeLinks", provide REAL YouTube URLs for tutorials about the specific ${detectedLang} concepts and errors found. Examples of good channels: freeCodeCamp, Traversy Media, The Coding Train, Corey Schafer, Programming with Mosh, etc.
+3. For "youtubeSearchQueries", provide helpful search terms users can use on YouTube to learn about the concepts. Do NOT provide actual URLs as they may be invalid.
 4. Analyze every line from line 1 to line ${codeLength} - do not skip any section.
 
 ${explanationLanguage !== 'english' ? `
@@ -503,14 +604,29 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     try {
       parsedResult = JSON.parse(cleanedContent);
     } catch {
-      console.error('Failed to parse OpenRouter response:', cleanedContent);
-      throw new Error('Failed to parse AI response');
+      // Try to repair truncated JSON
+      console.log('[v0] Attempting to repair truncated JSON response');
+      try {
+        parsedResult = repairTruncatedJSON(cleanedContent);
+      } catch {
+        console.error('Failed to parse or repair OpenRouter response:', cleanedContent.slice(0, 500) + '...');
+        throw new Error('Failed to parse AI response');
+      }
     }
 
     const codeHealth = calculateCodeHealth(parsedResult.errors || []);
     
     // Clean the corrected code to remove markdown formatting
-    const cleanedCorrectedCode = cleanCorrectedCode(parsedResult.correctedCode || code);
+    // If correctedCode is truncated (ends with ... or is much shorter than original), use original code
+    let correctedCodeRaw = parsedResult.correctedCode || code;
+    if (typeof correctedCodeRaw === 'string' && 
+        (correctedCodeRaw.endsWith('...') || 
+         correctedCodeRaw.endsWith('..') ||
+         (correctedCodeRaw.length < code.length * 0.5 && code.length > 100))) {
+      console.log('[v0] Corrected code appears truncated, using original code');
+      correctedCodeRaw = code;
+    }
+    const cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
     const diffView = generateDiff(code, cleanedCorrectedCode);
 
     const result: DebugResult = {
@@ -534,7 +650,7 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
       challengeMode: parsedResult.challengeMode,
       generalization: parsedResult.generalization || '',
       resources: {
-        youtubeLinks: parsedResult.resources?.youtubeLinks || [],
+        youtubeSearchQueries: parsedResult.resources?.youtubeSearchQueries || [],
         documentationLinks: parsedResult.resources?.documentationLinks || [],
       },
       codeHealth,
