@@ -292,72 +292,111 @@ function detectLanguage(code: string): ProgrammingLanguage {
   return detectedLang === 'auto' ? 'javascript' : detectedLang;
 }
 
-function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
+function calculateCodeHealth(errors: { type: string; severity?: string }[]): CodeHealthScore {
   let score = 100;
   let errorCount = 0;
   let warningCount = 0;
   let optimizationCount = 0;
+  let securityCount = 0;
+
+  // Severity-based scoring for more accurate health calculation
+  const severityDeductions: Record<string, number> = {
+    critical: 35,
+    high: 25,
+    medium: 15,
+    low: 8,
+    info: 3,
+  };
+
+  // Type-based deductions (fallback if severity not provided)
+  const typeDeductions: Record<string, { base: number; category: 'error' | 'warning' | 'optimization' }> = {
+    syntax: { base: 30, category: 'error' },
+    runtime: { base: 28, category: 'error' },
+    logical: { base: 25, category: 'error' },
+    type_error: { base: 22, category: 'error' },
+    null_reference: { base: 25, category: 'error' },
+    boundary: { base: 28, category: 'error' },
+    memory: { base: 30, category: 'error' },
+    security: { base: 35, category: 'error' },
+    concurrency: { base: 25, category: 'error' },
+    resource_leak: { base: 20, category: 'error' },
+    performance: { base: 12, category: 'optimization' },
+    warning: { base: 10, category: 'warning' },
+    bad_practice: { base: 5, category: 'optimization' },
+  };
 
   for (const error of errors) {
-    switch (error.type) {
-      case 'syntax':
-        score -= 30;
-        errorCount++;
-        break;
-      case 'runtime':
-        score -= 25;
-        errorCount++;
-        break;
-      case 'logical':
-        score -= 20;
-        errorCount++;
-        break;
-      case 'warning':
-        score -= 10;
-        warningCount++;
-        break;
-      case 'bad_practice':
-        score -= 5;
-        optimizationCount++;
-        break;
+    // Use severity if available, otherwise fall back to type-based scoring
+    if (error.severity && severityDeductions[error.severity]) {
+      score -= severityDeductions[error.severity];
+    } else {
+      const typeInfo = typeDeductions[error.type] || { base: 15, category: 'warning' };
+      score -= typeInfo.base;
+    }
+
+    // Categorize for statistics
+    const typeInfo = typeDeductions[error.type];
+    if (typeInfo) {
+      switch (typeInfo.category) {
+        case 'error':
+          if (error.type === 'security') {
+            securityCount++;
+          }
+          errorCount++;
+          break;
+        case 'warning':
+          warningCount++;
+          break;
+        case 'optimization':
+          optimizationCount++;
+          break;
+      }
+    } else {
+      warningCount++;
     }
   }
 
   score = Math.max(0, Math.min(100, score));
   
-  // Calculate percentages that add up to exactly 100%
+  // Calculate grade based on score
+  const getGrade = (s: number): 'A' | 'B' | 'C' | 'D' | 'F' => {
+    if (s >= 90) return 'A';
+    if (s >= 80) return 'B';
+    if (s >= 70) return 'C';
+    if (s >= 60) return 'D';
+    return 'F';
+  };
+
   const totalIssues = errorCount + warningCount + optimizationCount;
   
   if (totalIssues === 0) {
-    // No issues - 100% correct
     return {
       score: 100,
       correct: 100,
       errors: 0,
       warnings: 0,
       optimizations: 0,
+      grade: 'A',
     };
   }
 
-  // Calculate the "correct" portion based on score
   const correctPortion = score;
   const issuesPortion = 100 - score;
   
-  // Distribute the issues portion among error types proportionally
   const errorPercent = totalIssues > 0 ? Math.round((errorCount / totalIssues) * issuesPortion) : 0;
   const warningPercent = totalIssues > 0 ? Math.round((warningCount / totalIssues) * issuesPortion) : 0;
   const optimizationPercent = totalIssues > 0 ? Math.round((optimizationCount / totalIssues) * issuesPortion) : 0;
   
-  // Adjust for rounding errors to ensure total is exactly 100%
   const total = correctPortion + errorPercent + warningPercent + optimizationPercent;
   const adjustment = 100 - total;
   
   return {
     score,
-    correct: correctPortion + adjustment, // Add any rounding adjustment to correct
+    correct: correctPortion + adjustment,
     errors: errorPercent,
     warnings: warningPercent,
     optimizations: optimizationPercent,
+    grade: getGrade(score),
   };
 }
 
@@ -469,13 +508,18 @@ export async function POST(request: NextRequest) {
     const codeLength = codeLines.length;
     const isLongCode = codeLength > 50;
 
-    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code COMPLETELY and provide comprehensive debugging assistance.
+    const prompt = `You are an EXPERT AI debugging assistant with deep knowledge of compilers, interpreters, security analysis, and code optimization. Perform a COMPREHENSIVE multi-pass analysis of the following ${detectedLang} code.
 
-IMPORTANT INSTRUCTIONS:
-- This code has ${codeLength} lines. You MUST analyze EVERY SINGLE LINE carefully.
-- Do NOT skip any part of the code, regardless of its length.
-- Examine each line for potential errors, warnings, or bad practices.
-- For long code, take your time to analyze thoroughly - completeness is more important than speed.
+ANALYSIS INSTRUCTIONS:
+- This code has ${codeLength} lines. Analyze EVERY SINGLE LINE in multiple passes.
+- Pass 1: Syntax Analysis - Check for syntax errors, missing brackets, semicolons, etc.
+- Pass 2: Semantic Analysis - Check for type errors, undeclared variables, scope issues.
+- Pass 3: Runtime Analysis - Check for potential runtime errors (null/undefined, division by zero, infinite loops).
+- Pass 4: Logic Analysis - Check for off-by-one errors, incorrect conditions, wrong operators.
+- Pass 5: Security Analysis - Check for buffer overflows, SQL injection, XSS, input validation.
+- Pass 6: Memory Analysis - Check for memory leaks, dangling pointers, uninitialized variables.
+- Pass 7: Performance Analysis - Check for inefficient algorithms, unnecessary computations.
+- Pass 8: Best Practices - Check coding standards, naming conventions, code smell.
 
 CODE TO DEBUG (${codeLength} lines):
 \`\`\`${detectedLang}
@@ -486,42 +530,80 @@ USER LEVEL: ${userLevel}
 EXPLANATION LANGUAGE: ${explanationLanguage}
 LEARNING MODE: ${learningMode}
 
-Please provide your response in the following JSON format (respond ONLY with valid JSON, no markdown):
+Provide your response in the following JSON format (respond ONLY with valid JSON, no markdown):
 {
   "intent": "What the code is trying to accomplish",
-  "actualBehavior": "What the code actually does",
-  "error": "Description of what went wrong (or 'No errors found' if code is correct)",
-  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language, no jargon' : userLevel === 'intermediate' ? 'Use some technical terms with explanations' : 'Deep technical explanation with compiler-level reasoning'}",
-  "rootCause": "The fundamental reason for the error",
+  "actualBehavior": "What the code actually does (including edge cases)",
+  "error": "Primary error description (or 'No errors found. Code is correct and well-written.' if perfect)",
+  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language with analogies, avoid jargon' : userLevel === 'intermediate' ? 'Use technical terms with clear explanations' : 'Deep technical explanation with compiler/interpreter-level reasoning, memory layout, and CPU considerations'}",
+  "rootCause": "The fundamental reason for the error at the code/compiler level",
   "learning": {
-    "whyItHappened": "Why this error occurred",
-    "whenItHappens": "Common scenarios where this error occurs",
-    "howToAvoid": "Best practices to prevent this error",
-    "concept": "The underlying programming concept"
+    "whyItHappened": "Why this error occurred - technical reasoning",
+    "whenItHappens": "Common scenarios and patterns where this error occurs",
+    "howToAvoid": "Best practices, design patterns, and defensive coding techniques",
+    "concept": "The underlying CS concept (data structures, algorithms, memory model, etc.)"
   },
   "mentalModel": "An analogy or mental model to understand this better",
-  "teacherMode": "Step-by-step teaching explanation with examples",
+  "teacherMode": "Step-by-step teaching explanation with examples and analogies",
   "thinkMode": "Socratic questions to guide the user to understand the error themselves",
-  "conceptBuilder": "Focus on the core concept behind the error",
-  "debugTrace": "Step-by-step execution flow showing what happens at each important line with variable values",
-  "interviewMode": "How to explain this in a technical interview",
-  "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
-  "generalization": "How this error pattern applies to other scenarios",
+  "conceptBuilder": "Focus on the core concept behind the error with visual explanations",
+  "debugTrace": "Step-by-step execution flow showing what happens at each line with variable values and memory state",
+  "interviewMode": "How to explain this in a technical interview - what interviewers look for",
+  "challengeMode": "Progressive hints for the user to solve it themselves (3 levels of hints)",
+  "generalization": "How this error pattern applies to other languages, scenarios, and real-world systems",
+  "codeQuality": {
+    "maintainability": "Assessment of code maintainability (1-10)",
+    "readability": "Assessment of code readability (1-10)",
+    "efficiency": "Assessment of code efficiency (1-10)",
+    "suggestions": ["List of improvement suggestions beyond bug fixes"]
+  },
   "resources": {
-    "youtubeSearchQueries": ["Provide 2-4 specific YouTube SEARCH QUERIES (not URLs) that would help find tutorials for this error. Example: 'Python function return statement tutorial', 'C binary search tree implementation'"],
-    "documentationLinks": ["Official documentation links for the programming language related to this error"]
+    "youtubeSearchQueries": ["2-4 specific YouTube SEARCH QUERIES for tutorials"],
+    "documentationLinks": ["Official documentation links"],
+    "relatedPatterns": ["Related design patterns or algorithms to study"]
   },
   "errors": [
-    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number>, "message": "detailed error description for this specific line", "fix": "the corrected version of this specific line"}
+    {
+      "type": "syntax|runtime|logical|warning|bad_practice|security|performance|memory|type_error|null_reference|boundary|concurrency|resource_leak",
+      "severity": "critical|high|medium|low|info",
+      "line": <exact line number>,
+      "column": <optional column number>,
+      "message": "detailed error description",
+      "fix": "the corrected version of this line",
+      "suggestion": "additional improvement suggestion",
+      "category": "category grouping (e.g., Memory Management, Input Validation)",
+      "impact": "what happens if this is not fixed"
+    }
   ],
-  "correctedCode": "The COMPLETE fixed version of the code - include ALL ${codeLength} lines with corrections applied"
+  "correctedCode": "The COMPLETE fixed version of the code - ALL ${codeLength} lines with corrections"
 }
 
 CRITICAL REQUIREMENTS:
-1. The "errors" array MUST include ALL errors found in the code with their EXACT line numbers (1-indexed).
-2. The "correctedCode" MUST be the COMPLETE fixed code - do NOT truncate or abbreviate it.
-3. For "youtubeSearchQueries", provide helpful search terms users can use on YouTube to learn about the concepts. Do NOT provide actual URLs as they may be invalid.
-4. Analyze every line from line 1 to line ${codeLength} - do not skip any section.
+1. DETECT ALL ERROR TYPES:
+   - syntax: Missing brackets, semicolons, invalid syntax
+   - runtime: Null pointer, array out of bounds, division by zero
+   - logical: Wrong conditions, off-by-one, incorrect operators
+   - type_error: Type mismatches, invalid casts
+   - null_reference: Null/undefined access, uninitialized variables
+   - boundary: Buffer overflow, array bounds, integer overflow
+   - memory: Memory leaks, dangling pointers, use after free
+   - security: SQL injection, XSS, command injection, insecure input
+   - performance: Inefficient algorithms, unnecessary operations
+   - concurrency: Race conditions, deadlocks
+   - resource_leak: Unclosed files, connections, handles
+   - warning: Potential issues, deprecated usage
+   - bad_practice: Code smell, poor naming, magic numbers
+
+2. SEVERITY LEVELS:
+   - critical: Code will crash or has severe security vulnerability
+   - high: Significant bug or security issue
+   - medium: Bug that affects some functionality
+   - low: Minor issue or potential problem
+   - info: Suggestion for improvement
+
+3. The "errors" array MUST include ALL issues with EXACT line numbers (1-indexed).
+4. The "correctedCode" MUST be COMPLETE - never truncate.
+5. If code is PERFECT, return empty errors array and say "No errors found."
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:

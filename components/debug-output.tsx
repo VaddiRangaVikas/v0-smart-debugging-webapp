@@ -72,7 +72,7 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
   return (
     <ScrollArea className="h-full">
       <div className="space-y-4 p-4">
-        {/* Status Banner */}
+        {/* Status Banner with Grade */}
         <Card className={cn(
           'relative overflow-hidden backdrop-blur-sm transition-all',
           hasErrors 
@@ -85,32 +85,47 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
               ? 'bg-gradient-to-r from-red-500/20 via-transparent to-red-500/20'
               : 'bg-gradient-to-r from-green-500/20 via-transparent to-green-500/20'
           )} />
-          <CardContent className="relative flex items-center gap-4 py-4">
-            <div className={cn(
-              'flex h-12 w-12 items-center justify-center rounded-full',
-              hasErrors 
-                ? 'bg-red-500/20 animate-pulse'
-                : 'bg-green-500/20'
-            )}>
-              {hasErrors ? (
-                <XCircle className="h-6 w-6 text-red-400" />
-              ) : (
-                <CheckCircle2 className="h-6 w-6 text-green-400" />
-              )}
-            </div>
-            <div>
-              <h3 className={cn(
-                'text-lg font-bold',
-                hasErrors ? 'text-red-400' : 'text-green-400'
+          <CardContent className="relative flex items-center justify-between py-4">
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                'flex h-12 w-12 items-center justify-center rounded-full',
+                hasErrors 
+                  ? 'bg-red-500/20 animate-pulse'
+                  : 'bg-green-500/20'
               )}>
-                {hasErrors ? 'Errors Detected' : 'Code Looks Good!'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {hasErrors 
-                  ? 'Issues found in your code. See details below.'
-                  : 'No errors found. Your code is working correctly!'}
-              </p>
+                {hasErrors ? (
+                  <XCircle className="h-6 w-6 text-red-400" />
+                ) : (
+                  <CheckCircle2 className="h-6 w-6 text-green-400" />
+                )}
+              </div>
+              <div>
+                <h3 className={cn(
+                  'text-lg font-bold',
+                  hasErrors ? 'text-red-400' : 'text-green-400'
+                )}>
+                  {hasErrors ? 'Errors Detected' : 'Code Looks Good!'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {hasErrors 
+                    ? 'Issues found in your code. See details below.'
+                    : 'No errors found. Your code is working correctly!'}
+                </p>
+              </div>
             </div>
+            {/* Grade Badge */}
+            {result.codeHealth?.grade && (
+              <div className={cn(
+                'flex h-14 w-14 items-center justify-center rounded-xl text-2xl font-bold',
+                result.codeHealth.grade === 'A' && 'bg-green-500/20 text-green-400',
+                result.codeHealth.grade === 'B' && 'bg-blue-500/20 text-blue-400',
+                result.codeHealth.grade === 'C' && 'bg-yellow-500/20 text-yellow-400',
+                result.codeHealth.grade === 'D' && 'bg-orange-500/20 text-orange-400',
+                result.codeHealth.grade === 'F' && 'bg-red-500/20 text-red-400',
+              )}>
+                {result.codeHealth.grade}
+              </div>
+            )}
           </CardContent>
         </Card>
 

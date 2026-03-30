@@ -46,12 +46,63 @@ export type LearningMode =
   | 'interview'
   | 'challenge';
 
+export type ErrorType = 
+  | 'syntax' 
+  | 'runtime' 
+  | 'logical' 
+  | 'warning' 
+  | 'bad_practice'
+  | 'security'
+  | 'performance'
+  | 'memory'
+  | 'type_error'
+  | 'null_reference'
+  | 'boundary'
+  | 'concurrency'
+  | 'resource_leak';
+
+export type ErrorSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
 export interface ErrorInfo {
-  type: 'syntax' | 'runtime' | 'logical' | 'warning' | 'bad_practice';
+  type: ErrorType;
   line?: number;
+  column?: number;
+  endLine?: number;
+  endColumn?: number;
   message: string;
-  severity: number;
+  severity: ErrorSeverity;
+  severityScore: number; // 1-10 scale for precise scoring
   fix?: string; // The corrected version of the error line
+  suggestion?: string; // Additional suggestion for improvement
+  category?: string; // Category grouping (e.g., "Memory Management", "Input Validation")
+  cweId?: string; // Common Weakness Enumeration ID for security issues
+  impact?: string; // Description of the impact if not fixed
+}
+
+export interface CodeComplexity {
+  cyclomaticComplexity: number;
+  cognitiveComplexity: number;
+  linesOfCode: number;
+  nestingDepth: number;
+  maintainabilityIndex: number; // 0-100 scale
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+}
+
+export interface SecurityAnalysis {
+  vulnerabilities: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  securityScore: number; // 0-100 scale
+  issues: Array<{
+    type: string;
+    severity: ErrorSeverity;
+    line?: number;
+    description: string;
+    recommendation: string;
+    cweId?: string;
+  }>;
 }
 
 export interface CodeHealthScore {
@@ -60,6 +111,9 @@ export interface CodeHealthScore {
   errors: number;
   warnings: number;
   optimizations: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  complexity?: CodeComplexity;
+  security?: SecurityAnalysis;
 }
 
 export interface DiffLine {

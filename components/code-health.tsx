@@ -148,10 +148,23 @@ export function CodeHealth({ health }: CodeHealthProps) {
                 />
               </PieChart>
             </ResponsiveContainer>
-            {/* Center label */}
+            {/* Center label with Grade */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <Activity className={cn('mx-auto h-5 w-5 animate-pulse', getScoreColor(health.score))} />
+                {health.grade ? (
+                  <span className={cn(
+                    'text-2xl font-bold',
+                    health.grade === 'A' && 'text-cyan-400',
+                    health.grade === 'B' && 'text-blue-400',
+                    health.grade === 'C' && 'text-amber-400',
+                    health.grade === 'D' && 'text-orange-400',
+                    health.grade === 'F' && 'text-rose-400',
+                  )}>
+                    {health.grade}
+                  </span>
+                ) : (
+                  <Activity className={cn('mx-auto h-5 w-5 animate-pulse', getScoreColor(health.score))} />
+                )}
               </div>
             </div>
           </div>
