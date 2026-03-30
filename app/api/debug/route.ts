@@ -617,17 +617,61 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     const codeHealth = calculateCodeHealth(parsedResult.errors || []);
     
     // Clean the corrected code to remove markdown formatting
-    // If correctedCode is truncated (ends with ... or is much shorter than original), use original code
-    let correctedCodeRaw = parsedResult.correctedCode || code;
-    if (typeof correctedCodeRaw === 'string' && 
+    let correctedCodeRaw = parsedResult.correctedCode || '';
+    let codeWasTruncated = false;
+    
+    // Check if correctedCode is truncated or empty
+    const isTruncated = typeof correctedCodeRaw === 'string' && 
         (correctedCodeRaw.endsWith('...') || 
          correctedCodeRaw.endsWith('..') ||
-         (correctedCodeRaw.length < code.length * 0.5 && code.length > 100))) {
-      console.log('[v0] Corrected code appears truncated, using original code');
+         !correctedCodeRaw.trim() ||
+         (correctedCodeRaw.length < code.length * 0.5 && code.length > 100));
+    
+    if (isTruncated) {
+      console.log('[v0] Corrected code appears truncated, attempting to recover');
+      codeWasTruncated = true;
+      
+      // Try to use partial corrected code if it has meaningful content
+      if (correctedCodeRaw.trim() && correctedCodeRaw.length > 20) {
+        // Remove trailing ... and try to complete the code
+        correctedCodeRaw = correctedCodeRaw.replace(/\.{2,}$/, '');
+        // Append remaining lines from original if partial
+        const partialLines = correctedCodeRaw.split('\n').length;
+        const originalLines = code.split('\n');
+        if (partialLines < originalLines.length) {
+          // Append missing lines from original
+          const remainingLines = originalLines.slice(partialLines);
+          correctedCodeRaw = correctedCodeRaw + '\n' + remainingLines.join('\n');
+        }
+      } else {
+        // No useful corrected code, use original
+        correctedCodeRaw = code;
+      }
+    }
+    
+    // If still no corrected code, use original
+    if (!correctedCodeRaw.trim()) {
       correctedCodeRaw = code;
     }
+    
     const cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
-    const diffView = generateDiff(code, cleanedCorrectedCode);
+    
+    // Generate diff
+    let diffView: DiffLine[];
+    const errors = parsedResult.errors || [];
+    
+    if (cleanedCorrectedCode.trim() === code.trim() && errors.length > 0) {
+      // No actual code changes but we have errors - highlight error lines in red
+      const errorLines = new Set(errors.map((e: {line?: number}) => e.line).filter(Boolean));
+      const codeLines = code.split('\n');
+      diffView = codeLines.map((line, index) => ({
+        type: errorLines.has(index + 1) ? 'removed' as const : 'unchanged' as const,
+        content: line,
+        lineNumber: index + 1,
+      }));
+    } else {
+      diffView = generateDiff(code, cleanedCorrectedCode);
+    }
 
     const result: DebugResult = {
       intent: parsedResult.intent || 'Unable to determine intent',

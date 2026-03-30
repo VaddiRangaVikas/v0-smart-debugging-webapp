@@ -1,5 +1,6 @@
 'use client';
 
+// DiffViewer component - displays code transformation with diff view and clean code tabs
 import { useState } from 'react';
 import { Copy, Download, Check, Eye, Code2, Plus, Minus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
