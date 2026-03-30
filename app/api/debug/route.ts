@@ -615,19 +615,47 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     }
 
     const codeHealth = calculateCodeHealth(parsedResult.errors || []);
+    const errors = parsedResult.errors || [];
+    const hasRealErrors = errors.length > 0 && errors.some((e: { type: string }) => 
+      e.type === 'syntax' || e.type === 'runtime' || e.type === 'logical'
+    );
     
     // Clean the corrected code to remove markdown formatting
-    // If correctedCode is truncated (ends with ... or is much shorter than original), use original code
+    // If correctedCode is truncated, try to generate diff from error information
     let correctedCodeRaw = parsedResult.correctedCode || code;
+    let isTruncated = false;
+    
     if (typeof correctedCodeRaw === 'string' && 
         (correctedCodeRaw.endsWith('...') || 
          correctedCodeRaw.endsWith('..') ||
          (correctedCodeRaw.length < code.length * 0.5 && code.length > 100))) {
-      console.log('[v0] Corrected code appears truncated, using original code');
-      correctedCodeRaw = code;
+      console.log('[v0] Corrected code appears truncated');
+      isTruncated = true;
     }
-    const cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
-    const diffView = generateDiff(code, cleanedCorrectedCode);
+    
+    let cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
+    let diffView: DiffLine[];
+    
+    // If truncated but we have errors, generate a diff based on error lines
+    if (isTruncated && hasRealErrors) {
+      console.log('[v0] Generating diff from error information');
+      const errorLines = new Set(errors.map((e: { line: number }) => e.line).filter((l: number) => l > 0));
+      const codeLines = code.split('\n');
+      
+      diffView = codeLines.map((line, i) => {
+        const lineNum = i + 1;
+        if (errorLines.has(lineNum)) {
+          // Mark error lines as removed (they need to be fixed)
+          return { type: 'removed' as const, content: line, lineNumber: lineNum };
+        }
+        return { type: 'unchanged' as const, content: line, lineNumber: lineNum };
+      });
+      
+      // Use original code as corrected since we don't have the fix, but mark errors
+      cleanedCorrectedCode = code;
+    } else {
+      diffView = generateDiff(code, cleanedCorrectedCode);
+    }
 
     const result: DebugResult = {
       intent: parsedResult.intent || 'Unable to determine intent',

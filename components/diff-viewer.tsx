@@ -173,15 +173,17 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, h
             className="gap-1.5 border-red-500/30 bg-red-500/10 text-red-400"
           >
             <Minus className="h-3 w-3" />
-            <span>{removedLines} errors</span>
+            <span>{removedLines} error line{removedLines !== 1 ? 's' : ''}</span>
           </Badge>
-          <Badge 
-            variant="outline" 
-            className="gap-1.5 border-blue-500/30 bg-blue-500/10 text-blue-400"
-          >
-            <Plus className="h-3 w-3" />
-            <span>{addedLines} corrections</span>
-          </Badge>
+          {addedLines > 0 && (
+            <Badge 
+              variant="outline" 
+              className="gap-1.5 border-blue-500/30 bg-blue-500/10 text-blue-400"
+            >
+              <Plus className="h-3 w-3" />
+              <span>{addedLines} correction{addedLines !== 1 ? 's' : ''}</span>
+            </Badge>
+          )}
           <Badge 
             variant="outline" 
             className="gap-1.5 border-border/50 text-muted-foreground"
@@ -260,23 +262,31 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, h
 
           <TabsContent value="clean" className="m-0 flex-1 overflow-hidden">
             {/* Clean Code Header */}
-            <div className="flex items-center gap-2 border-b border-border/30 bg-green-500/5 px-4 py-2">
-              <Check className="h-3.5 w-3.5 text-green-400" />
-              <span className="text-xs text-green-400 font-medium">Debugged Code</span>
-              <span className="text-xs text-muted-foreground">- All errors fixed</span>
-            </div>
+            {addedLines > 0 ? (
+              <div className="flex items-center gap-2 border-b border-border/30 bg-green-500/5 px-4 py-2">
+                <Check className="h-3.5 w-3.5 text-green-400" />
+                <span className="text-xs text-green-400 font-medium">Debugged Code</span>
+                <span className="text-xs text-muted-foreground">- All errors fixed</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 border-b border-border/30 bg-amber-500/5 px-4 py-2">
+                <Code2 className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-xs text-amber-400 font-medium">Original Code with Errors</span>
+                <span className="text-xs text-muted-foreground">- See Diff View for error lines</span>
+              </div>
+            )}
             <ScrollArea className="h-[calc(100%-32px)]">
               <div className="flex">
                 {/* Line numbers */}
                 <div className="flex flex-col border-r border-border/30 bg-muted/20 px-3 py-4 font-mono text-xs text-muted-foreground/40 select-none">
-                  {correctedCode.split('\n').map((_, i) => (
+                  {(addedLines > 0 ? correctedCode : originalCode).split('\n').map((_, i) => (
                     <span key={i} className="leading-5 text-right min-w-[2ch]">
                       {i + 1}
                     </span>
                   ))}
                 </div>
                 <pre className="flex-1 p-4 font-mono text-xs leading-5">
-                  <code className="text-foreground">{correctedCode}</code>
+                  <code className="text-foreground">{addedLines > 0 ? correctedCode : originalCode}</code>
                 </pre>
               </div>
             </ScrollArea>

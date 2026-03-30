@@ -329,13 +329,19 @@ export default function DebugAssistant() {
                 diffView={result?.diffView ?? []}
                 hasResult={result !== null}
                 hasErrors={
-                  result?.error 
+                  // Check codeHealth score - if below 100, there are errors
+                  (result?.codeHealth && result.codeHealth.score < 100) ||
+                  // Also check if diffView has any removed/added lines
+                  (result?.diffView && result.diffView.some(d => d.type === 'removed' || d.type === 'added')) ||
+                  // Fallback to error text check
+                  (result?.error 
                     ? !result.error.toLowerCase().includes('no error') &&
                       !result.error.toLowerCase().includes('no issues') &&
                       !result.error.toLowerCase().includes('code is correct') &&
                       !result.error.toLowerCase().includes('looks correct') &&
-                      !result.error.toLowerCase().includes('correctly implemented')
-                    : false
+                      !result.error.toLowerCase().includes('correctly implemented') &&
+                      !result.error.toLowerCase().includes('no errors found')
+                    : false)
                 }
               />
             </div>
