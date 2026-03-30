@@ -15,9 +15,10 @@ interface DiffViewerProps {
   correctedCode: string;
   diffView: DiffLine[];
   hasResult: boolean; // Whether debugging has been run
+  hasErrors: boolean; // Whether errors were detected in the code
 }
 
-export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }: DiffViewerProps) {
+export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, hasErrors }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<'diff' | 'clean'>('diff');
 
@@ -91,10 +92,13 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
     );
   }
 
-  // Check if the code is essentially the same (no real changes needed)
-  const noChangesNeeded = !correctedCode || 
+  // Check if the code is correct (no errors detected AND no changes needed)
+  // Only show "Your code is correct" if hasErrors is false
+  const noChangesNeeded = !hasErrors && (
+    !correctedCode || 
     correctedCode.trim() === originalCode.trim() ||
-    diffView.every(d => d.type === 'unchanged');
+    diffView.every(d => d.type === 'unchanged')
+  );
 
   if (noChangesNeeded) {
     return (
@@ -128,14 +132,17 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult }:
   }
 
   return (
-    <Card className="flex h-full flex-col border-border/50 bg-card/50 backdrop-blur-sm transition-all hover:border-primary/30 hover:shadow-[0_0_30px_rgba(0,255,255,0.1)]">
+    <Card className="flex h-full flex-col border-red-500/30 bg-card/50 backdrop-blur-sm transition-all hover:border-red-500/50 hover:shadow-[0_0_30px_rgba(239,68,68,0.15)]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-              <GitCompare className="h-3.5 w-3.5 text-primary" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/20">
+              <GitCompare className="h-3.5 w-3.5 text-red-400" />
             </div>
             <span>Code Transformation</span>
+            <Badge variant="secondary" className="ml-2 bg-red-500/20 text-red-400">
+              Errors Fixed
+            </Badge>
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button

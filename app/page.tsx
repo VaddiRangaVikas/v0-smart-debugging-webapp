@@ -328,6 +328,15 @@ export default function DebugAssistant() {
                 correctedCode={result?.correctedCode ?? ''}
                 diffView={result?.diffView ?? []}
                 hasResult={result !== null}
+                hasErrors={
+                  result?.error 
+                    ? !result.error.toLowerCase().includes('no error') &&
+                      !result.error.toLowerCase().includes('no issues') &&
+                      !result.error.toLowerCase().includes('code is correct') &&
+                      !result.error.toLowerCase().includes('looks correct') &&
+                      !result.error.toLowerCase().includes('correctly implemented')
+                    : false
+                }
               />
             </div>
           </div>
