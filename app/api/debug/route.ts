@@ -657,6 +657,12 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
       correctedCode: cleanedCorrectedCode,
       diffView,
       detectedLanguage: detectedLang,
+      errors: (parsedResult.errors || []).map((e: { type?: string; line?: number; message?: string }) => ({
+        type: e.type || 'logical',
+        line: e.line,
+        message: e.message || 'Unknown error',
+        severity: e.type === 'syntax' ? 3 : e.type === 'runtime' ? 2 : 1,
+      })),
     };
 
     return NextResponse.json(result);

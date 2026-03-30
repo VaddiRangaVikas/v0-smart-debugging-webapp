@@ -96,6 +96,7 @@ export interface DebugResult {
   correctedCode: string;
   diffView: DiffLine[];
   detectedLanguage: ProgrammingLanguage;
+  errors: ErrorInfo[];
 }
 
 export interface DebugRequest {

@@ -328,6 +328,7 @@ export default function DebugAssistant() {
                 correctedCode={result?.correctedCode ?? ''}
                 diffView={result?.diffView ?? []}
                 hasResult={result !== null}
+                errors={result?.errors ?? []}
               />
             </div>
           </div>
