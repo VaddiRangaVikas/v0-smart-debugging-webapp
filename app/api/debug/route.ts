@@ -361,6 +361,50 @@ function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
   };
 }
 
+// Generate a suggested fix based on error message
+function generateSuggestionFromError(errorMessage: string, originalLine: string): string {
+  const msg = errorMessage.toLowerCase();
+  let suggestion = originalLine;
+  
+  // Common error patterns and their fixes
+  if (msg.includes('missing semicolon') || msg.includes('add semicolon')) {
+    if (!originalLine.trim().endsWith(';') && !originalLine.trim().endsWith('{') && !originalLine.trim().endsWith('}')) {
+      suggestion = originalLine.trimEnd() + ';';
+    }
+  }
+  else if (msg.includes('%d') && msg.includes('%ld') || msg.includes('format specifier')) {
+    // Format specifier issues
+    suggestion = originalLine.replace(/%d/g, '%ld').replace(/%i/g, '%li');
+  }
+  else if (msg.includes('typo') || msg.includes('should be')) {
+    // Try to extract the correct spelling from the error message
+    const shouldBeMatch = errorMessage.match(/should be ['"`]?(\w+)['"`]?/i);
+    if (shouldBeMatch) {
+      const correctWord = shouldBeMatch[1];
+      // Find the typo in the line and replace it
+      const typoMatch = errorMessage.match(/['"`]?(\w+)['"`]? should be/i);
+      if (typoMatch) {
+        suggestion = originalLine.replace(new RegExp(typoMatch[1], 'g'), correctWord);
+      }
+    }
+  }
+  else if (msg.includes('undefined variable') || msg.includes('not declared')) {
+    // Can't auto-fix undefined variables, keep original
+    suggestion = originalLine;
+  }
+  else if (msg.includes('missing closing') || msg.includes('unclosed')) {
+    if (msg.includes('parenthesis') || msg.includes(')')) {
+      suggestion = originalLine + ')';
+    } else if (msg.includes('brace') || msg.includes('}')) {
+      suggestion = originalLine + '}';
+    } else if (msg.includes('bracket') || msg.includes(']')) {
+      suggestion = originalLine + ']';
+    }
+  }
+  
+  return suggestion;
+}
+
 function cleanCorrectedCode(code: string): string {
   if (!code) return '';
   
@@ -486,42 +530,45 @@ USER LEVEL: ${userLevel}
 EXPLANATION LANGUAGE: ${explanationLanguage}
 LEARNING MODE: ${learningMode}
 
-Please provide your response in the following JSON format (respond ONLY with valid JSON, no markdown):
+Please provide your response in the following JSON format (respond ONLY with valid JSON, no markdown).
+IMPORTANT: The "errors" array and "correctedCode" MUST be provided FIRST as they are the most critical fields.
+
 {
+  "errors": [
+    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number 1-indexed>, "message": "detailed error description"}
+  ],
+  "correctedCode": "The COMPLETE fixed code with ALL corrections applied",
   "intent": "What the code is trying to accomplish",
   "actualBehavior": "What the code actually does",
-  "error": "Description of what went wrong (or 'No errors found' if code is correct)",
-  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language, no jargon' : userLevel === 'intermediate' ? 'Use some technical terms with explanations' : 'Deep technical explanation with compiler-level reasoning'}",
-  "rootCause": "The fundamental reason for the error",
+  "error": "Brief description of main issue (or 'No errors found')",
+  "explanation": "Explanation based on ${userLevel} level",
+  "rootCause": "Fundamental reason for the error",
   "learning": {
     "whyItHappened": "Why this error occurred",
-    "whenItHappens": "Common scenarios where this error occurs",
-    "howToAvoid": "Best practices to prevent this error",
-    "concept": "The underlying programming concept"
+    "whenItHappens": "Common scenarios",
+    "howToAvoid": "Prevention tips",
+    "concept": "Core concept"
   },
-  "mentalModel": "An analogy or mental model to understand this better",
-  "teacherMode": "Step-by-step teaching explanation with examples",
-  "thinkMode": "Socratic questions to guide the user to understand the error themselves",
-  "conceptBuilder": "Focus on the core concept behind the error",
-  "debugTrace": "Step-by-step execution flow showing what happens at each important line with variable values",
-  "interviewMode": "How to explain this in a technical interview",
-  "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
-  "generalization": "How this error pattern applies to other scenarios",
+  "mentalModel": "Analogy to understand better",
+  "teacherMode": "Teaching explanation",
+  "thinkMode": "Guiding questions",
+  "conceptBuilder": "Core concept focus",
+  "debugTrace": "Execution flow",
+  "interviewMode": "Interview explanation",
+  "challengeMode": "Hints to solve",
+  "generalization": "Pattern applications",
   "resources": {
-    "youtubeSearchQueries": ["Provide 2-4 specific YouTube SEARCH QUERIES (not URLs) that would help find tutorials for this error. Example: 'Python function return statement tutorial', 'C binary search tree implementation'"],
-    "documentationLinks": ["Official documentation links for the programming language related to this error"]
-  },
-  "errors": [
-    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number>, "message": "detailed error description for this specific line"}
-  ],
-  "correctedCode": "The COMPLETE fixed version of the code - include ALL ${codeLength} lines with corrections applied"
+    "youtubeSearchQueries": ["Search terms for tutorials"],
+    "documentationLinks": ["Doc links"]
+  }
 }
 
 CRITICAL REQUIREMENTS:
-1. The "errors" array MUST include ALL errors found in the code with their EXACT line numbers (1-indexed).
-2. The "correctedCode" MUST be the COMPLETE fixed code - do NOT truncate or abbreviate it.
-3. For "youtubeSearchQueries", provide helpful search terms users can use on YouTube to learn about the concepts. Do NOT provide actual URLs as they may be invalid.
-4. Analyze every line from line 1 to line ${codeLength} - do not skip any section.
+1. OUTPUT "errors" ARRAY FIRST - List ALL errors with EXACT line numbers (1-indexed). Each error needs: type, line, message.
+2. OUTPUT "correctedCode" SECOND - The COMPLETE fixed code. Do NOT truncate. Include ALL ${codeLength} lines.
+3. Detect ALL types of errors: syntax errors, runtime errors, logical errors, type mismatches, missing semicolons, wrong operators, undefined variables, etc.
+4. For each error, explain WHAT is wrong and HOW to fix it in the message field.
+5. The correctedCode must compile/run without errors - verify all fixes are applied.
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
@@ -661,14 +708,44 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     const errors = parsedResult.errors || [];
     
     if (cleanedCorrectedCode.trim() === code.trim() && errors.length > 0) {
-      // No actual code changes but we have errors - highlight error lines in red
-      const errorLines = new Set(errors.map((e: {line?: number}) => e.line).filter(Boolean));
+      // No actual code changes but we have errors - show error lines as removed
+      // and try to generate suggested fixes as added lines
+      const errorLinesMap = new Map<number, {type?: string; message?: string}>();
+      errors.forEach((e: {line?: number; type?: string; message?: string}) => {
+        if (e.line) errorLinesMap.set(e.line, e);
+      });
+      
       const codeLines = code.split('\n');
-      diffView = codeLines.map((line, index) => ({
-        type: errorLines.has(index + 1) ? 'removed' as const : 'unchanged' as const,
-        content: line,
-        lineNumber: index + 1,
-      }));
+      diffView = [];
+      
+      codeLines.forEach((line, index) => {
+        const lineNum = index + 1;
+        const errorInfo = errorLinesMap.get(lineNum);
+        
+        if (errorInfo) {
+          // Add the error line as removed (red)
+          diffView.push({
+            type: 'removed' as const,
+            content: line,
+            lineNumber: lineNum,
+          });
+          // Add a suggested fix comment as added (cyan) if we can provide guidance
+          const suggestion = generateSuggestionFromError(errorInfo.message || '', line);
+          if (suggestion && suggestion !== line) {
+            diffView.push({
+              type: 'added' as const,
+              content: suggestion,
+              lineNumber: lineNum,
+            });
+          }
+        } else {
+          diffView.push({
+            type: 'unchanged' as const,
+            content: line,
+            lineNumber: lineNum,
+          });
+        }
+      });
     } else {
       diffView = generateDiff(code, cleanedCorrectedCode);
     }
