@@ -61,13 +61,28 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
     );
   }
 
-  // Check if there are errors
-  const hasErrors = result.error && 
-    !result.error.toLowerCase().includes('no error') && 
-    !result.error.toLowerCase().includes('no issues') &&
-    !result.error.toLowerCase().includes('code is correct') &&
-    !result.error.toLowerCase().includes('looks correct') &&
-    !result.error.toLowerCase().includes('correctly implemented');
+  // Check if there are errors - prioritize codeHealth score
+  const hasErrors = (() => {
+    // If codeHealth score is 100, code is correct - no errors
+    if (result.codeHealth && result.codeHealth.score === 100) return false;
+    
+    // Check error message for "no error" phrases
+    if (result.error) {
+      const errorLower = result.error.toLowerCase();
+      const noErrorPhrases = [
+        'no error', 'no errors', 'no issues', 'code is correct', 
+        'looks correct', 'correctly implemented', 'looks good',
+        'well-written', 'no bugs', 'correct'
+      ];
+      if (noErrorPhrases.some(phrase => errorLower.includes(phrase))) return false;
+    }
+    
+    // If codeHealth score is below 100, there are errors
+    if (result.codeHealth && result.codeHealth.score < 100) return true;
+    
+    // Default: check if error message exists and is meaningful
+    return result.error && result.error.trim().length > 0;
+  })();
 
   return (
     <ScrollArea className="h-full">
