@@ -508,18 +508,23 @@ export async function POST(request: NextRequest) {
     const codeLength = codeLines.length;
     const isLongCode = codeLength > 50;
 
-    const prompt = `You are an EXPERT AI debugging assistant with deep knowledge of compilers, interpreters, security analysis, and code optimization. Perform a COMPREHENSIVE multi-pass analysis of the following ${detectedLang} code.
+    const prompt = `You are an EXPERT AI debugging assistant with deep knowledge of compilers, interpreters, and code analysis. Perform COMPREHENSIVE analysis of the following ${detectedLang} code.
 
-ANALYSIS INSTRUCTIONS:
-- This code has ${codeLength} lines. Analyze EVERY SINGLE LINE in multiple passes.
-- Pass 1: Syntax Analysis - Check for syntax errors, missing brackets, semicolons, etc.
-- Pass 2: Semantic Analysis - Check for type errors, undeclared variables, scope issues.
-- Pass 3: Runtime Analysis - Check for potential runtime errors (null/undefined, division by zero, infinite loops).
-- Pass 4: Logic Analysis - Check for off-by-one errors, incorrect conditions, wrong operators.
-- Pass 5: Security Analysis - Check for buffer overflows, SQL injection, XSS, input validation.
-- Pass 6: Memory Analysis - Check for memory leaks, dangling pointers, uninitialized variables.
-- Pass 7: Performance Analysis - Check for inefficient algorithms, unnecessary computations.
-- Pass 8: Best Practices - Check coding standards, naming conventions, code smell.
+CRITICAL: FOCUS ONLY ON CODE ERRORS - NOT STRING CONTENT
+- ONLY detect errors in ACTUAL CODE: syntax, logic, function calls, variable usage, operators, control flow
+- DO NOT flag spelling/grammar issues inside strings like printf("mesage") or comments
+- DO NOT flag typos in string literals - they are intentional text, not code errors
+- ONLY flag issues that would cause compilation errors, runtime crashes, or incorrect program behavior
+
+ANALYSIS PASSES (${codeLength} lines):
+- Pass 1: SYNTAX - Missing/extra brackets, parentheses, semicolons, quotes, invalid keywords
+- Pass 2: VARIABLES - Undeclared variables, uninitialized use, scope errors, wrong types
+- Pass 3: FUNCTIONS - Missing return, wrong parameters, undefined functions, incorrect calls
+- Pass 4: LOGIC - Off-by-one errors, wrong operators (= vs ==), incorrect conditions, infinite loops
+- Pass 5: MEMORY - Null/dangling pointers, buffer overflow, memory leaks, unallocated access
+- Pass 6: RUNTIME - Division by zero, array out of bounds, null dereference, type errors
+- Pass 7: SECURITY - Buffer overflow vulnerabilities, input validation issues
+- Pass 8: BEST PRACTICES - Only if code compiles but has potential issues
 
 CODE TO DEBUG (${codeLength} lines):
 \`\`\`${detectedLang}
@@ -579,22 +584,28 @@ Provide your response in the following JSON format (respond ONLY with valid JSON
 }
 
 CRITICAL REQUIREMENTS:
-1. DETECT ALL ERROR TYPES:
-   - syntax: Missing brackets, semicolons, invalid syntax
-   - runtime: Null pointer, array out of bounds, division by zero
-   - logical: Wrong conditions, off-by-one, incorrect operators
-   - type_error: Type mismatches, invalid casts
-   - null_reference: Null/undefined access, uninitialized variables
-   - boundary: Buffer overflow, array bounds, integer overflow
-   - memory: Memory leaks, dangling pointers, use after free
-   - security: SQL injection, XSS, command injection, insecure input
-   - performance: Inefficient algorithms, unnecessary operations
-   - concurrency: Race conditions, deadlocks
-   - resource_leak: Unclosed files, connections, handles
-   - warning: Potential issues, deprecated usage
-   - bad_practice: Code smell, poor naming, magic numbers
+1. ONLY DETECT ACTUAL CODE ERRORS (NOT string content or comments):
+   - syntax: Missing brackets {}, parentheses (), semicolons ;, mismatched quotes
+   - runtime: Null pointer dereference, array index out of bounds, division by zero
+   - logical: Wrong comparison (= instead of ==), off-by-one in loops, incorrect boolean logic
+   - type_error: Assigning wrong type, invalid function arguments, type mismatch
+   - null_reference: Using pointer/variable before initialization, accessing freed memory
+   - boundary: Array access beyond allocated size, buffer overflow, integer overflow
+   - memory: malloc without free, use after free, dangling pointers, memory leaks
+   
+2. DO NOT FLAG AS ERRORS:
+   - Spelling mistakes inside strings: printf("helo") is NOT an error
+   - Grammar issues in comments: // this function do thing is NOT an error
+   - Variable names that look like typos but are valid identifiers
+   - String content formatting or wording choices
+   - security: SQL injection, command injection, buffer overflow exploits
+   - performance: O(n^2) when O(n) possible, unnecessary recomputation
+   - concurrency: Race conditions, deadlocks, unsynchronized access
+   - resource_leak: Unclosed files/sockets, unreleased locks
+   - warning: Deprecated API usage, potential issues
+   - bad_practice: Actual code issues like magic numbers in logic, not string content
 
-2. SEVERITY LEVELS:
+3. SEVERITY LEVELS:
    - critical: Code will crash or has severe security vulnerability
    - high: Significant bug or security issue
    - medium: Bug that affects some functionality
@@ -603,7 +614,9 @@ CRITICAL REQUIREMENTS:
 
 3. The "errors" array MUST include ALL issues with EXACT line numbers (1-indexed).
 4. The "correctedCode" MUST be COMPLETE - never truncate.
-5. If code is PERFECT, return empty errors array and say "No errors found."
+5. If code is PERFECT (no actual code errors), return empty errors array and say "No errors found. Code is correct."
+6. REMEMBER: Strings like printf("wrng speling") are NOT errors - only CODE structure matters.
+7. Focus on errors that would cause: compilation failure, runtime crash, incorrect output, or security vulnerability.
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
