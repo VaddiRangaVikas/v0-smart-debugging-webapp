@@ -513,19 +513,26 @@ export async function POST(request: NextRequest) {
     
     const prompt = `You are an AI code debugger. Analyze this ${detectedLang} code for ACTUAL CODE ERRORS ONLY.
 
-RULES:
-- ONLY flag REAL CODE ERRORS: syntax errors, runtime crashes, logical bugs
-- DO NOT flag: spelling in strings, grammar in comments, style preferences, string content
-- If the code will COMPILE and RUN CORRECTLY, it is CORRECT code
+RULES - ONLY CHECK IF CODE COMPILES AND EXECUTES:
+- ONLY flag errors that PREVENT compilation or cause runtime CRASH
+- Code is CORRECT if it COMPILES and RUNS without crashing
 
-IMPORTANT - CODE IS CORRECT IF:
-- It will compile without errors
-- It will run without crashing
-- The logic produces correct output
-- DO NOT flag printf("mesage") as error - string content is NOT a code error
-- DO NOT flag variable naming style - that is preference, not error
+DO NOT FLAG THESE AS ERRORS (they are NOT code errors):
+- Spaces in format specifiers: printf("%d %d") is VALID, not an error
+- String content/spelling: printf("helo wrld") is VALID code
+- Variable naming style: int x, int myVar, int my_var - all VALID
+- Comment grammar: // this do thing - VALID
+- Formatting preferences: spaces, indentation - VALID
+- Output formatting choices - VALID
 
-If code is CORRECT: Set "error": "No errors found. Code is correct." and "errors": []
+ONLY FLAG THESE AS ERRORS:
+- Missing semicolons, brackets, parentheses (syntax)
+- Undeclared variables, undefined functions (syntax)
+- Null pointer access, array out of bounds (runtime)
+- Division by zero, infinite loops (runtime)
+- Wrong operator like = instead of == in conditions (logical)
+
+If code COMPILES and RUNS: Set "error": "No errors found. Code is correct." and "errors": []
 
 CODE WITH LINE NUMBERS (use these EXACT line numbers in errors):
 \`\`\`
