@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Copy, Download, Check, Eye, Code2, Plus, Minus, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,22 @@ interface DiffViewerProps {
 export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, errors = [] }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<'diff' | 'clean'>('diff');
+
+  // Check if there are actual errors detected
+  const hasErrors = errors.length > 0;
+  
+  // Create error line numbers set for quick lookup
+  const errorLineNumbers = new Set(errors.filter(e => e.line).map(e => e.line));
+
+  // Generate code view with error highlighting
+  const codeWithErrorHighlighting = hasErrors && originalCode 
+    ? originalCode.split('\n').map((line, index) => ({
+        type: errorLineNumbers.has(index + 1) ? 'error' as const : 'unchanged' as const,
+        content: line,
+        lineNumber: index + 1,
+        errorInfo: errors.find(e => e.line === index + 1),
+      }))
+    : [];
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(correctedCode);
@@ -66,6 +82,11 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
     }
   };
 
+  // Check if the code is essentially the same (no real changes needed)
+  const noChangesNeeded = !correctedCode || 
+    correctedCode.trim() === originalCode.trim() ||
+    diffView.every(d => d.type === 'unchanged');
+
   // Show waiting state if no result yet (before debugging)
   if (!hasResult) {
     return (
@@ -89,31 +110,6 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, e
       </Card>
     );
   }
-
-  // Check if there are actual errors detected
-  const hasErrors = errors.length > 0;
-  
-  // Create error line numbers set for quick lookup
-  const errorLineNumbers = useMemo(() => {
-    return new Set(errors.filter(e => e.line).map(e => e.line));
-  }, [errors]);
-
-  // Generate code view with error highlighting when no diff changes but errors exist
-  const codeWithErrorHighlighting = useMemo(() => {
-    if (!hasErrors || !originalCode) return [];
-    
-    return originalCode.split('\n').map((line, index) => ({
-      type: errorLineNumbers.has(index + 1) ? 'error' as const : 'unchanged' as const,
-      content: line,
-      lineNumber: index + 1,
-      errorInfo: errors.find(e => e.line === index + 1),
-    }));
-  }, [originalCode, hasErrors, errorLineNumbers, errors]);
-
-  // Check if the code is essentially the same (no real changes needed)
-  const noChangesNeeded = !correctedCode || 
-    correctedCode.trim() === originalCode.trim() ||
-    diffView.every(d => d.type === 'unchanged');
 
   // If no diff changes BUT there are errors, show error highlighting view
   if (noChangesNeeded && hasErrors) {
