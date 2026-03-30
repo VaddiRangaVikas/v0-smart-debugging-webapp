@@ -332,13 +332,10 @@ export default function DebugAssistant() {
                   // If no result, no errors to show
                   if (!result) return false;
                   
-                  // Check codeHealth score - if below 100, there are errors
-                  if (result.codeHealth && result.codeHealth.score < 100) return true;
+                  // PRIORITY 1: If codeHealth score is 100, code is definitely correct - NO errors
+                  if (result.codeHealth && result.codeHealth.score === 100) return false;
                   
-                  // Check if diffView has any removed/added lines (actual changes)
-                  if (result.diffView && result.diffView.some(d => d.type === 'removed' || d.type === 'added')) return true;
-                  
-                  // Check error text - if it indicates errors exist
+                  // PRIORITY 2: Check error text for "no error" phrases
                   if (result.error) {
                     const errorLower = result.error.toLowerCase();
                     const noErrorPhrases = [
@@ -348,10 +345,15 @@ export default function DebugAssistant() {
                     ];
                     // If any "no error" phrase is found, no errors
                     if (noErrorPhrases.some(phrase => errorLower.includes(phrase))) return false;
-                    // Otherwise there are errors
-                    return true;
                   }
                   
+                  // PRIORITY 3: If codeHealth score is below 100, there are errors
+                  if (result.codeHealth && result.codeHealth.score < 100) return true;
+                  
+                  // PRIORITY 4: Check if diffView has any removed/added lines (actual changes)
+                  if (result.diffView && result.diffView.some(d => d.type === 'removed' || d.type === 'added')) return true;
+                  
+                  // Default: no errors
                   return false;
                 })()}
               />
