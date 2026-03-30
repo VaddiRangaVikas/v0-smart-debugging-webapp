@@ -388,7 +388,7 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
           </TabsContent>
 
           <TabsContent value="resources" className="mt-4 space-y-4">
-            {/* YouTube Links */}
+            {/* YouTube Search Queries */}
             <Card className="border-red-500/30 bg-card/50 backdrop-blur-sm transition-all hover:border-red-500/50 hover:shadow-[0_0_20px_rgba(239,68,68,0.1)]">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -396,27 +396,27 @@ export function DebugOutput({ result, learningMode }: DebugOutputProps) {
                     <Youtube className="h-3.5 w-3.5 text-red-400" />
                   </div>
                   <span>YouTube Tutorials</span>
-                  {result.resources.youtubeLinks.length > 0 && (
+                  {(result.resources.youtubeSearchQueries?.length || 0) > 0 && (
                     <Badge variant="secondary" className="ml-2 bg-red-500/20 text-red-400">
-                      {result.resources.youtubeLinks.length} videos
+                      {result.resources.youtubeSearchQueries?.length} searches
                     </Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {result.resources.youtubeLinks.length > 0 ? (
+                {(result.resources.youtubeSearchQueries?.length || 0) > 0 ? (
                   <ul className="space-y-2">
-                    {result.resources.youtubeLinks.map((link, i) => (
+                    {result.resources.youtubeSearchQueries?.map((query, i) => (
                       <li key={i}>
                         <a
-                          href={link}
+                          href={`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-3 rounded-lg border border-border/50 bg-secondary/30 px-4 py-3 text-sm transition-all hover:border-red-500/50 hover:bg-red-500/10"
                         >
                           <Youtube className="h-5 w-5 shrink-0 text-red-400" />
-                          <span className="flex-1 truncate text-foreground">{link}</span>
-                          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="flex-1 text-foreground">{query}</span>
+                          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
                         </a>
                       </li>
                     ))}

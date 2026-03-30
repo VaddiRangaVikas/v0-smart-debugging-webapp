@@ -84,7 +84,7 @@ export default function DebugAssistant() {
     setHistory(prev => prev.filter(item => item.id !== id));
   }, []);
 
-  const handleDebug = useCallback(async () => {
+  const handleDebug = useCallback(async (skipHistory = false) => {
     if (!code.trim()) {
       setError('Please enter some code to debug');
       return;
@@ -117,14 +117,47 @@ export default function DebugAssistant() {
       }
 
       setResult(data);
-      addToHistory(data);
+      if (!skipHistory) {
+        addToHistory(data);
+      }
     } catch (err) {
       console.error('Debug error:', err);
       setError('Failed to connect to the AI service. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [code, language, explanationLanguage, userLevel, learningMode]);
+  }, [code, language, explanationLanguage, userLevel, learningMode, addToHistory]);
+
+  // Re-analyze when language or learning mode changes after having results
+  const handleExplanationLanguageChange = useCallback((newLang: ExplanationLanguage) => {
+    setExplanationLanguage(newLang);
+    if (result && code.trim()) {
+      // Trigger re-analysis with new language after state updates
+      setTimeout(() => {
+        handleDebug(true);
+      }, 100);
+    }
+  }, [result, code, handleDebug]);
+
+  const handleLearningModeChange = useCallback((newMode: LearningMode) => {
+    setLearningMode(newMode);
+    if (result && code.trim()) {
+      // Trigger re-analysis with new mode after state updates
+      setTimeout(() => {
+        handleDebug(true);
+      }, 100);
+    }
+  }, [result, code, handleDebug]);
+
+  const handleUserLevelChange = useCallback((newLevel: UserLevel) => {
+    setUserLevel(newLevel);
+    if (result && code.trim()) {
+      // Trigger re-analysis with new level after state updates
+      setTimeout(() => {
+        handleDebug(true);
+      }, 100);
+    }
+  }, [result, code, handleDebug]);
 
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} duration={2500} />;
@@ -174,9 +207,9 @@ export default function DebugAssistant() {
               learningMode={learningMode}
               detectedLanguage={result?.detectedLanguage}
               onLanguageChange={setLanguage}
-              onExplanationLanguageChange={setExplanationLanguage}
-              onUserLevelChange={setUserLevel}
-              onLearningModeChange={setLearningMode}
+              onExplanationLanguageChange={handleExplanationLanguageChange}
+              onUserLevelChange={handleUserLevelChange}
+              onLearningModeChange={handleLearningModeChange}
             />
           </div>
         </div>

@@ -407,7 +407,7 @@ Please provide your response in the following JSON format (respond ONLY with val
   "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
   "generalization": "How this error pattern applies to other scenarios",
   "resources": {
-    "youtubeLinks": ["MUST provide 2-5 REAL, WORKING YouTube video URLs that teach the specific concept/error found in this code. Use actual YouTube URLs in format https://www.youtube.com/watch?v=VIDEOID - search for popular programming tutorials related to the specific error type and language"],
+    "youtubeSearchQueries": ["Provide 2-4 specific YouTube SEARCH QUERIES (not URLs) that would help find tutorials for this error. Example: 'Python function return statement tutorial', 'C binary search tree implementation'"],
     "documentationLinks": ["Official documentation links for the programming language related to this error"]
   },
   "errors": [
@@ -419,7 +419,7 @@ Please provide your response in the following JSON format (respond ONLY with val
 CRITICAL REQUIREMENTS:
 1. The "errors" array MUST include ALL errors found in the code with their EXACT line numbers (1-indexed).
 2. The "correctedCode" MUST be the COMPLETE fixed code - do NOT truncate or abbreviate it.
-3. For "youtubeLinks", provide REAL YouTube URLs for tutorials about the specific ${detectedLang} concepts and errors found. Examples of good channels: freeCodeCamp, Traversy Media, The Coding Train, Corey Schafer, Programming with Mosh, etc.
+3. For "youtubeSearchQueries", provide helpful search terms users can use on YouTube to learn about the concepts. Do NOT provide actual URLs as they may be invalid.
 4. Analyze every line from line 1 to line ${codeLength} - do not skip any section.
 
 ${explanationLanguage !== 'english' ? `
@@ -534,7 +534,7 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
       challengeMode: parsedResult.challengeMode,
       generalization: parsedResult.generalization || '',
       resources: {
-        youtubeLinks: parsedResult.resources?.youtubeLinks || [],
+        youtubeSearchQueries: parsedResult.resources?.youtubeSearchQueries || [],
         documentationLinks: parsedResult.resources?.documentationLinks || [],
       },
       codeHealth,
