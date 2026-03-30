@@ -292,72 +292,111 @@ function detectLanguage(code: string): ProgrammingLanguage {
   return detectedLang === 'auto' ? 'javascript' : detectedLang;
 }
 
-function calculateCodeHealth(errors: { type: string }[]): CodeHealthScore {
+function calculateCodeHealth(errors: { type: string; severity?: string }[]): CodeHealthScore {
   let score = 100;
   let errorCount = 0;
   let warningCount = 0;
   let optimizationCount = 0;
+  let securityCount = 0;
+
+  // Severity-based scoring for more accurate health calculation
+  const severityDeductions: Record<string, number> = {
+    critical: 35,
+    high: 25,
+    medium: 15,
+    low: 8,
+    info: 3,
+  };
+
+  // Type-based deductions (fallback if severity not provided)
+  const typeDeductions: Record<string, { base: number; category: 'error' | 'warning' | 'optimization' }> = {
+    syntax: { base: 30, category: 'error' },
+    runtime: { base: 28, category: 'error' },
+    logical: { base: 25, category: 'error' },
+    type_error: { base: 22, category: 'error' },
+    null_reference: { base: 25, category: 'error' },
+    boundary: { base: 28, category: 'error' },
+    memory: { base: 30, category: 'error' },
+    security: { base: 35, category: 'error' },
+    concurrency: { base: 25, category: 'error' },
+    resource_leak: { base: 20, category: 'error' },
+    performance: { base: 12, category: 'optimization' },
+    warning: { base: 10, category: 'warning' },
+    bad_practice: { base: 5, category: 'optimization' },
+  };
 
   for (const error of errors) {
-    switch (error.type) {
-      case 'syntax':
-        score -= 30;
-        errorCount++;
-        break;
-      case 'runtime':
-        score -= 25;
-        errorCount++;
-        break;
-      case 'logical':
-        score -= 20;
-        errorCount++;
-        break;
-      case 'warning':
-        score -= 10;
-        warningCount++;
-        break;
-      case 'bad_practice':
-        score -= 5;
-        optimizationCount++;
-        break;
+    // Use severity if available, otherwise fall back to type-based scoring
+    if (error.severity && severityDeductions[error.severity]) {
+      score -= severityDeductions[error.severity];
+    } else {
+      const typeInfo = typeDeductions[error.type] || { base: 15, category: 'warning' };
+      score -= typeInfo.base;
+    }
+
+    // Categorize for statistics
+    const typeInfo = typeDeductions[error.type];
+    if (typeInfo) {
+      switch (typeInfo.category) {
+        case 'error':
+          if (error.type === 'security') {
+            securityCount++;
+          }
+          errorCount++;
+          break;
+        case 'warning':
+          warningCount++;
+          break;
+        case 'optimization':
+          optimizationCount++;
+          break;
+      }
+    } else {
+      warningCount++;
     }
   }
 
   score = Math.max(0, Math.min(100, score));
   
-  // Calculate percentages that add up to exactly 100%
+  // Calculate grade based on score
+  const getGrade = (s: number): 'A' | 'B' | 'C' | 'D' | 'F' => {
+    if (s >= 90) return 'A';
+    if (s >= 80) return 'B';
+    if (s >= 70) return 'C';
+    if (s >= 60) return 'D';
+    return 'F';
+  };
+
   const totalIssues = errorCount + warningCount + optimizationCount;
   
   if (totalIssues === 0) {
-    // No issues - 100% correct
     return {
       score: 100,
       correct: 100,
       errors: 0,
       warnings: 0,
       optimizations: 0,
+      grade: 'A',
     };
   }
 
-  // Calculate the "correct" portion based on score
   const correctPortion = score;
   const issuesPortion = 100 - score;
   
-  // Distribute the issues portion among error types proportionally
   const errorPercent = totalIssues > 0 ? Math.round((errorCount / totalIssues) * issuesPortion) : 0;
   const warningPercent = totalIssues > 0 ? Math.round((warningCount / totalIssues) * issuesPortion) : 0;
   const optimizationPercent = totalIssues > 0 ? Math.round((optimizationCount / totalIssues) * issuesPortion) : 0;
   
-  // Adjust for rounding errors to ensure total is exactly 100%
   const total = correctPortion + errorPercent + warningPercent + optimizationPercent;
   const adjustment = 100 - total;
   
   return {
     score,
-    correct: correctPortion + adjustment, // Add any rounding adjustment to correct
+    correct: correctPortion + adjustment,
     errors: errorPercent,
     warnings: warningPercent,
     optimizations: optimizationPercent,
+    grade: getGrade(score),
   };
 }
 
@@ -469,59 +508,74 @@ export async function POST(request: NextRequest) {
     const codeLength = codeLines.length;
     const isLongCode = codeLength > 50;
 
-    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code COMPLETELY and provide comprehensive debugging assistance.
+    // Create numbered code for better line detection
+    const numberedCode = codeLines.map((line, i) => `${i + 1}: ${line}`).join('\n');
+    
+    const prompt = `You are an AI code debugger. Analyze this ${detectedLang} code for ACTUAL CODE ERRORS ONLY.
 
-IMPORTANT INSTRUCTIONS:
-- This code has ${codeLength} lines. You MUST analyze EVERY SINGLE LINE carefully.
-- Do NOT skip any part of the code, regardless of its length.
-- Examine each line for potential errors, warnings, or bad practices.
-- For long code, take your time to analyze thoroughly - completeness is more important than speed.
+RULES - ONLY CHECK IF CODE COMPILES AND EXECUTES:
+- ONLY flag errors that PREVENT compilation or cause runtime CRASH
+- Code is CORRECT if it COMPILES and RUNS without crashing
 
-CODE TO DEBUG (${codeLength} lines):
-\`\`\`${detectedLang}
-${code}
+DO NOT FLAG THESE AS ERRORS (they are NOT code errors):
+- Spaces in format specifiers: printf("%d %d") is VALID, not an error
+- String content/spelling: printf("helo wrld") is VALID code
+- Variable naming style: int x, int myVar, int my_var - all VALID
+- Comment grammar: // this do thing - VALID
+- Formatting preferences: spaces, indentation - VALID
+- Output formatting choices - VALID
+
+ONLY FLAG THESE AS ERRORS:
+- Missing semicolons, brackets, parentheses (syntax)
+- Undeclared variables, undefined functions (syntax)
+- Null pointer access, array out of bounds (runtime)
+- Division by zero, infinite loops (runtime)
+- Wrong operator like = instead of == in conditions (logical)
+
+If code COMPILES and RUNS: Set "error": "No errors found. Code is correct." and "errors": []
+
+CODE WITH LINE NUMBERS (use these EXACT line numbers in errors):
+\`\`\`
+${numberedCode}
 \`\`\`
 
-USER LEVEL: ${userLevel}
-EXPLANATION LANGUAGE: ${explanationLanguage}
-LEARNING MODE: ${learningMode}
-
-Please provide your response in the following JSON format (respond ONLY with valid JSON, no markdown):
+Respond ONLY with this JSON:
 {
-  "intent": "What the code is trying to accomplish",
-  "actualBehavior": "What the code actually does",
-  "error": "Description of what went wrong (or 'No errors found' if code is correct)",
-  "explanation": "Detailed explanation based on user level (${userLevel}) - ${userLevel === 'beginner' ? 'Use simple language, no jargon' : userLevel === 'intermediate' ? 'Use some technical terms with explanations' : 'Deep technical explanation with compiler-level reasoning'}",
-  "rootCause": "The fundamental reason for the error",
-  "learning": {
-    "whyItHappened": "Why this error occurred",
-    "whenItHappens": "Common scenarios where this error occurs",
-    "howToAvoid": "Best practices to prevent this error",
-    "concept": "The underlying programming concept"
-  },
-  "mentalModel": "An analogy or mental model to understand this better",
-  "teacherMode": "Step-by-step teaching explanation with examples",
-  "thinkMode": "Socratic questions to guide the user to understand the error themselves",
-  "conceptBuilder": "Focus on the core concept behind the error",
-  "debugTrace": "Step-by-step execution flow showing what happens at each important line with variable values",
-  "interviewMode": "How to explain this in a technical interview",
-  "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
-  "generalization": "How this error pattern applies to other scenarios",
-  "resources": {
-    "youtubeSearchQueries": ["Provide 2-4 specific YouTube SEARCH QUERIES (not URLs) that would help find tutorials for this error. Example: 'Python function return statement tutorial', 'C binary search tree implementation'"],
-    "documentationLinks": ["Official documentation links for the programming language related to this error"]
-  },
+  "intent": "What code does",
+  "actualBehavior": "What it actually does",
+  "error": "Main error OR 'No errors found. Code is correct.'",
+  "explanation": "${userLevel === 'beginner' ? 'Simple explanation' : 'Technical explanation'}",
+  "rootCause": "Why error occurs",
+  "learning": {"whyItHappened": "", "whenItHappens": "", "howToAvoid": "", "concept": ""},
+  "mentalModel": "Analogy",
+  "teacherMode": "Teaching explanation",
+  "thinkMode": "Guiding questions",
+  "conceptBuilder": "Core concept",
+  "debugTrace": "Execution trace",
+  "interviewMode": "Interview explanation",
+  "challengeMode": "Hints",
+  "generalization": "Pattern",
+  "resources": {"youtubeSearchQueries": [], "documentationLinks": []},
   "errors": [
-    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number>, "message": "detailed error description for this specific line"}
+    {
+      "type": "syntax|runtime|logical|memory",
+      "severity": "critical|high|medium|low",
+      "line": <EXACT line number from above>,
+      "message": "what is wrong",
+      "fix": "THE COMPLETE CORRECTED LINE (without line number prefix)"
+    }
   ],
-  "correctedCode": "The COMPLETE fixed version of the code - include ALL ${codeLength} lines with corrections applied"
+  "correctedCode": "ALL ${codeLength} lines with fixes applied"
 }
 
-CRITICAL REQUIREMENTS:
-1. The "errors" array MUST include ALL errors found in the code with their EXACT line numbers (1-indexed).
-2. The "correctedCode" MUST be the COMPLETE fixed code - do NOT truncate or abbreviate it.
-3. For "youtubeSearchQueries", provide helpful search terms users can use on YouTube to learn about the concepts. Do NOT provide actual URLs as they may be invalid.
-4. Analyze every line from line 1 to line ${codeLength} - do not skip any section.
+CRITICAL FOR ERRORS ARRAY:
+- "line" MUST be the EXACT line number shown above (1, 2, 3, etc.)
+- "fix" MUST be the COMPLETE corrected version of that line (code only, no line number)
+- Example: If line "5: printf("hello")" has missing semicolon, fix is: printf("hello");
+
+ERROR TYPES: syntax (missing ;{}), runtime (null/bounds), logical (wrong ==), memory (leak/overflow)
+
+IF NO ERRORS: Return "errors": [] and "error": "No errors found. Code is correct."
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
@@ -614,20 +668,101 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
       }
     }
 
-    const codeHealth = calculateCodeHealth(parsedResult.errors || []);
+    const errors = parsedResult.errors || [];
+    
+    // Check the error message for "no errors" indication FIRST
+    const errorMessage = (parsedResult.error || '').toLowerCase();
+    const errorMessageIndicatesCorrect = 
+      errorMessage.includes('no error') || 
+      errorMessage.includes('code is correct') ||
+      errorMessage.includes('no issues') ||
+      errorMessage.includes('correct') ||
+      errorMessage.includes('well-written') ||
+      errorMessage.includes('looks good');
+    
+    // If the AI says code is correct, trust that - ignore any false positive errors
+    const isCodeCorrect = errorMessageIndicatesCorrect || errors.length === 0;
+    
+    // Only consider real errors if the code is NOT marked as correct
+    const realErrorTypes = ['syntax', 'runtime', 'logical', 'memory', 'security', 'type_error', 'null_reference', 'boundary'];
+    const hasRealErrors = !isCodeCorrect && errors.length > 0 && errors.some((e: { type: string }) => 
+      realErrorTypes.includes(e.type)
+    );
+    
+    // Calculate code health - force 100 if code is correct
+    const codeHealth = isCodeCorrect 
+      ? { score: 100, correct: 100, errors: 0, warnings: 0, optimizations: 0, grade: 'A' as const }
+      : calculateCodeHealth(errors);
     
     // Clean the corrected code to remove markdown formatting
-    // If correctedCode is truncated (ends with ... or is much shorter than original), use original code
+    // If correctedCode is truncated, try to generate diff from error information
     let correctedCodeRaw = parsedResult.correctedCode || code;
+    let isTruncated = false;
+    
     if (typeof correctedCodeRaw === 'string' && 
         (correctedCodeRaw.endsWith('...') || 
          correctedCodeRaw.endsWith('..') ||
          (correctedCodeRaw.length < code.length * 0.5 && code.length > 100))) {
-      console.log('[v0] Corrected code appears truncated, using original code');
-      correctedCodeRaw = code;
+      console.log('[v0] Corrected code appears truncated');
+      isTruncated = true;
     }
-    const cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
-    const diffView = generateDiff(code, cleanedCorrectedCode);
+    
+    let cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
+    let diffView: DiffLine[];
+    
+    // If code is correct, don't generate any diff - just use original code
+    if (isCodeCorrect) {
+      cleanedCorrectedCode = code;
+      diffView = code.split('\n').map((line, i) => ({
+        type: 'unchanged' as const,
+        content: line,
+        lineNumber: i + 1
+      }));
+    }
+    // If truncated but we have errors, generate a diff based on error lines with their fixes
+    else if (isTruncated && hasRealErrors) {
+      console.log('[v0] Generating diff from error information with fixes');
+      
+      // Create a map of line numbers to their fixes
+      const errorFixMap = new Map<number, { message: string; fix: string }>();
+      errors.forEach((e: { line: number; message: string; fix?: string }) => {
+        if (e.line > 0) {
+          errorFixMap.set(e.line, { message: e.message, fix: e.fix || '' });
+        }
+      });
+      
+      const codeLines = code.split('\n');
+      diffView = [];
+      const correctedLines: string[] = [];
+      
+      codeLines.forEach((line, i) => {
+        const lineNum = i + 1;
+        const errorInfo = errorFixMap.get(lineNum);
+        
+        if (errorInfo) {
+          // This line has an error - mark it as removed (red)
+          diffView.push({ type: 'removed' as const, content: line, lineNumber: lineNum });
+          
+          // If we have a fix, add it as added (blue) and use it in corrected code
+          if (errorInfo.fix && errorInfo.fix.trim()) {
+            diffView.push({ type: 'added' as const, content: errorInfo.fix, lineNumber: lineNum });
+            correctedLines.push(errorInfo.fix);
+          } else {
+            // No fix provided, keep original line in corrected code
+            correctedLines.push(line);
+          }
+        } else {
+          // No error on this line
+          diffView.push({ type: 'unchanged' as const, content: line, lineNumber: lineNum });
+          correctedLines.push(line);
+        }
+      });
+      
+      // Build the corrected code from the fixed lines
+      cleanedCorrectedCode = correctedLines.join('\n');
+    } else {
+      diffView = generateDiff(code, cleanedCorrectedCode);
+    }
 
     const result: DebugResult = {
       intent: parsedResult.intent || 'Unable to determine intent',

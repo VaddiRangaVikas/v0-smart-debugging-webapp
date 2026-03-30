@@ -328,6 +328,34 @@ export default function DebugAssistant() {
                 correctedCode={result?.correctedCode ?? ''}
                 diffView={result?.diffView ?? []}
                 hasResult={result !== null}
+                hasErrors={(() => {
+                  // If no result, no errors to show
+                  if (!result) return false;
+                  
+                  // PRIORITY 1: If codeHealth score is 100, code is definitely correct - NO errors
+                  if (result.codeHealth && result.codeHealth.score === 100) return false;
+                  
+                  // PRIORITY 2: Check error text for "no error" phrases
+                  if (result.error) {
+                    const errorLower = result.error.toLowerCase();
+                    const noErrorPhrases = [
+                      'no error', 'no errors', 'no issues', 'code is correct', 
+                      'looks correct', 'correctly implemented', 'no errors found',
+                      'no bugs', 'no problems', 'code looks good', 'well written'
+                    ];
+                    // If any "no error" phrase is found, no errors
+                    if (noErrorPhrases.some(phrase => errorLower.includes(phrase))) return false;
+                  }
+                  
+                  // PRIORITY 3: If codeHealth score is below 100, there are errors
+                  if (result.codeHealth && result.codeHealth.score < 100) return true;
+                  
+                  // PRIORITY 4: Check if diffView has any removed/added lines (actual changes)
+                  if (result.diffView && result.diffView.some(d => d.type === 'removed' || d.type === 'added')) return true;
+                  
+                  // Default: no errors
+                  return false;
+                })()}
               />
             </div>
           </div>
