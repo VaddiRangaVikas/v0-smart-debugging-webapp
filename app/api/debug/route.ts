@@ -508,57 +508,58 @@ export async function POST(request: NextRequest) {
     const codeLength = codeLines.length;
     const isLongCode = codeLength > 50;
 
+    // Create numbered code for better line detection
+    const numberedCode = codeLines.map((line, i) => `${i + 1}: ${line}`).join('\n');
+    
     const prompt = `You are an AI code debugger. Analyze this ${detectedLang} code for ACTUAL CODE ERRORS ONLY.
 
-IMPORTANT RULES:
-- ONLY flag errors that cause: compilation failure, runtime crash, or wrong output
-- DO NOT flag: spelling in strings, grammar in comments, coding style preferences
-- If code is CORRECT, return empty "errors" array
+RULES:
+- ONLY flag errors causing: compilation failure, runtime crash, or wrong output
+- DO NOT flag: spelling in strings, grammar in comments, style preferences
+- If code is CORRECT, return empty "errors" array and "error": "No errors found. Code is correct."
 
-CODE (${codeLength} lines):
-\`\`\`${detectedLang}
-${code}
+CODE WITH LINE NUMBERS (use these EXACT line numbers in errors):
+\`\`\`
+${numberedCode}
 \`\`\`
 
-Respond with ONLY this JSON (no markdown):
+Respond ONLY with this JSON:
 {
-  "intent": "Brief description of what code does",
+  "intent": "What code does",
   "actualBehavior": "What it actually does",
   "error": "Main error OR 'No errors found. Code is correct.'",
-  "explanation": "${userLevel === 'beginner' ? 'Simple explanation' : userLevel === 'intermediate' ? 'Technical explanation' : 'Advanced technical explanation'}",
+  "explanation": "${userLevel === 'beginner' ? 'Simple explanation' : 'Technical explanation'}",
   "rootCause": "Why error occurs",
-  "learning": {
-    "whyItHappened": "Cause",
-    "whenItHappens": "Common scenarios",
-    "howToAvoid": "Prevention tips",
-    "concept": "Related concept"
-  },
-  "mentalModel": "Simple analogy",
-  "teacherMode": "Step-by-step teaching",
+  "learning": {"whyItHappened": "", "whenItHappens": "", "howToAvoid": "", "concept": ""},
+  "mentalModel": "Analogy",
+  "teacherMode": "Teaching explanation",
   "thinkMode": "Guiding questions",
-  "conceptBuilder": "Core concept explanation",
+  "conceptBuilder": "Core concept",
   "debugTrace": "Execution trace",
   "interviewMode": "Interview explanation",
-  "challengeMode": "Hints without answer",
-  "generalization": "How pattern applies elsewhere",
-  "resources": {
-    "youtubeSearchQueries": ["search terms"],
-    "documentationLinks": ["doc links"]
-  },
+  "challengeMode": "Hints",
+  "generalization": "Pattern",
+  "resources": {"youtubeSearchQueries": [], "documentationLinks": []},
   "errors": [
-    {"type": "syntax|runtime|logical|memory|security", "severity": "critical|high|medium|low", "line": <number>, "message": "error description", "fix": "corrected line"}
+    {
+      "type": "syntax|runtime|logical|memory",
+      "severity": "critical|high|medium|low",
+      "line": <EXACT line number from above>,
+      "message": "what is wrong",
+      "fix": "THE COMPLETE CORRECTED LINE (without line number prefix)"
+    }
   ],
-  "correctedCode": "COMPLETE fixed code - all ${codeLength} lines"
+  "correctedCode": "ALL ${codeLength} lines with fixes applied"
 }
 
-ERROR TYPES TO DETECT:
-- syntax: Missing brackets, semicolons, invalid syntax
-- runtime: Null pointer, array bounds, division by zero
-- logical: Wrong operator (= vs ==), off-by-one, bad conditions
-- memory: Memory leak, dangling pointer, buffer overflow
-- security: Injection vulnerabilities
+CRITICAL FOR ERRORS ARRAY:
+- "line" MUST be the EXACT line number shown above (1, 2, 3, etc.)
+- "fix" MUST be the COMPLETE corrected version of that line (code only, no line number)
+- Example: If line "5: printf("hello")" has missing semicolon, fix is: printf("hello");
 
-IF CODE IS CORRECT: Set "errors": [] and "error": "No errors found. Code is correct."
+ERROR TYPES: syntax (missing ;{}), runtime (null/bounds), logical (wrong ==), memory (leak/overflow)
+
+IF NO ERRORS: Return "errors": [] and "error": "No errors found. Code is correct."
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
