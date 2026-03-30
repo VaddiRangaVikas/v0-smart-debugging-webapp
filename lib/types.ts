@@ -51,6 +51,7 @@ export interface ErrorInfo {
   line?: number;
   message: string;
   severity: number;
+  fix?: string; // The corrected version of the error line
 }
 
 export interface CodeHealthScore {

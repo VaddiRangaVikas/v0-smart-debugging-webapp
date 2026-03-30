@@ -512,7 +512,7 @@ Please provide your response in the following JSON format (respond ONLY with val
     "documentationLinks": ["Official documentation links for the programming language related to this error"]
   },
   "errors": [
-    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number>, "message": "detailed error description for this specific line"}
+    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number>, "message": "detailed error description for this specific line", "fix": "the corrected version of this specific line"}
   ],
   "correctedCode": "The COMPLETE fixed version of the code - include ALL ${codeLength} lines with corrections applied"
 }
@@ -636,23 +636,47 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
     let cleanedCorrectedCode = cleanCorrectedCode(correctedCodeRaw);
     let diffView: DiffLine[];
     
-    // If truncated but we have errors, generate a diff based on error lines
+    // If truncated but we have errors, generate a diff based on error lines with their fixes
     if (isTruncated && hasRealErrors) {
-      console.log('[v0] Generating diff from error information');
-      const errorLines = new Set(errors.map((e: { line: number }) => e.line).filter((l: number) => l > 0));
-      const codeLines = code.split('\n');
+      console.log('[v0] Generating diff from error information with fixes');
       
-      diffView = codeLines.map((line, i) => {
-        const lineNum = i + 1;
-        if (errorLines.has(lineNum)) {
-          // Mark error lines as removed (they need to be fixed)
-          return { type: 'removed' as const, content: line, lineNumber: lineNum };
+      // Create a map of line numbers to their fixes
+      const errorFixMap = new Map<number, { message: string; fix: string }>();
+      errors.forEach((e: { line: number; message: string; fix?: string }) => {
+        if (e.line > 0) {
+          errorFixMap.set(e.line, { message: e.message, fix: e.fix || '' });
         }
-        return { type: 'unchanged' as const, content: line, lineNumber: lineNum };
       });
       
-      // Use original code as corrected since we don't have the fix, but mark errors
-      cleanedCorrectedCode = code;
+      const codeLines = code.split('\n');
+      diffView = [];
+      const correctedLines: string[] = [];
+      
+      codeLines.forEach((line, i) => {
+        const lineNum = i + 1;
+        const errorInfo = errorFixMap.get(lineNum);
+        
+        if (errorInfo) {
+          // This line has an error - mark it as removed (red)
+          diffView.push({ type: 'removed' as const, content: line, lineNumber: lineNum });
+          
+          // If we have a fix, add it as added (blue) and use it in corrected code
+          if (errorInfo.fix && errorInfo.fix.trim()) {
+            diffView.push({ type: 'added' as const, content: errorInfo.fix, lineNumber: lineNum });
+            correctedLines.push(errorInfo.fix);
+          } else {
+            // No fix provided, keep original line in corrected code
+            correctedLines.push(line);
+          }
+        } else {
+          // No error on this line
+          diffView.push({ type: 'unchanged' as const, content: line, lineNumber: lineNum });
+          correctedLines.push(line);
+        }
+      });
+      
+      // Build the corrected code from the fixed lines
+      cleanedCorrectedCode = correctedLines.join('\n');
     } else {
       diffView = generateDiff(code, cleanedCorrectedCode);
     }

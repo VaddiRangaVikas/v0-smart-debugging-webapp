@@ -261,8 +261,8 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, h
           </TabsContent>
 
           <TabsContent value="clean" className="m-0 flex-1 overflow-hidden">
-            {/* Clean Code Header */}
-            {addedLines > 0 ? (
+            {/* Clean Code Header - Always show debugged code when we have corrections */}
+            {correctedCode && correctedCode.trim() !== originalCode.trim() ? (
               <div className="flex items-center gap-2 border-b border-border/30 bg-green-500/5 px-4 py-2">
                 <Check className="h-3.5 w-3.5 text-green-400" />
                 <span className="text-xs text-green-400 font-medium">Debugged Code</span>
@@ -271,22 +271,22 @@ export function DiffViewer({ originalCode, correctedCode, diffView, hasResult, h
             ) : (
               <div className="flex items-center gap-2 border-b border-border/30 bg-amber-500/5 px-4 py-2">
                 <Code2 className="h-3.5 w-3.5 text-amber-400" />
-                <span className="text-xs text-amber-400 font-medium">Original Code with Errors</span>
-                <span className="text-xs text-muted-foreground">- See Diff View for error lines</span>
+                <span className="text-xs text-amber-400 font-medium">Code Review</span>
+                <span className="text-xs text-muted-foreground">- Check Diff View for error details</span>
               </div>
             )}
             <ScrollArea className="h-[calc(100%-32px)]">
               <div className="flex">
                 {/* Line numbers */}
                 <div className="flex flex-col border-r border-border/30 bg-muted/20 px-3 py-4 font-mono text-xs text-muted-foreground/40 select-none">
-                  {(addedLines > 0 ? correctedCode : originalCode).split('\n').map((_, i) => (
+                  {(correctedCode && correctedCode.trim() !== originalCode.trim() ? correctedCode : originalCode).split('\n').map((_, i) => (
                     <span key={i} className="leading-5 text-right min-w-[2ch]">
                       {i + 1}
                     </span>
                   ))}
                 </div>
                 <pre className="flex-1 p-4 font-mono text-xs leading-5">
-                  <code className="text-foreground">{addedLines > 0 ? correctedCode : originalCode}</code>
+                  <code className="text-foreground">{correctedCode && correctedCode.trim() !== originalCode.trim() ? correctedCode : originalCode}</code>
                 </pre>
               </div>
             </ScrollArea>
