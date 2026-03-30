@@ -363,9 +363,20 @@ export async function POST(request: NextRequest) {
 
     const detectedLang = language === 'auto' ? detectLanguage(code) : language;
 
-    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code and provide comprehensive debugging assistance.
+    // Calculate code length for better handling
+    const codeLines = code.split('\n');
+    const codeLength = codeLines.length;
+    const isLongCode = codeLength > 50;
 
-CODE TO DEBUG:
+    const prompt = `You are an expert AI debugging assistant. Analyze the following ${detectedLang} code COMPLETELY and provide comprehensive debugging assistance.
+
+IMPORTANT INSTRUCTIONS:
+- This code has ${codeLength} lines. You MUST analyze EVERY SINGLE LINE carefully.
+- Do NOT skip any part of the code, regardless of its length.
+- Examine each line for potential errors, warnings, or bad practices.
+- For long code, take your time to analyze thoroughly - completeness is more important than speed.
+
+CODE TO DEBUG (${codeLength} lines):
 \`\`\`${detectedLang}
 ${code}
 \`\`\`
@@ -391,19 +402,25 @@ Please provide your response in the following JSON format (respond ONLY with val
   "teacherMode": "Step-by-step teaching explanation with examples",
   "thinkMode": "Socratic questions to guide the user to understand the error themselves",
   "conceptBuilder": "Focus on the core concept behind the error",
-  "debugTrace": "Step-by-step execution flow with variable values",
+  "debugTrace": "Step-by-step execution flow showing what happens at each important line with variable values",
   "interviewMode": "How to explain this in a technical interview",
   "challengeMode": "Hints for the user to solve it themselves (without giving the answer directly)",
   "generalization": "How this error pattern applies to other scenarios",
   "resources": {
-    "youtubeLinks": ["Relevant YouTube video URLs for learning this concept"],
-    "documentationLinks": ["Official documentation links for the programming language"]
+    "youtubeLinks": ["MUST provide 2-5 REAL, WORKING YouTube video URLs that teach the specific concept/error found in this code. Use actual YouTube URLs in format https://www.youtube.com/watch?v=VIDEOID - search for popular programming tutorials related to the specific error type and language"],
+    "documentationLinks": ["Official documentation links for the programming language related to this error"]
   },
   "errors": [
-    {"type": "syntax|runtime|logical|warning|bad_practice", "line": 1, "message": "error description"}
+    {"type": "syntax|runtime|logical|warning|bad_practice", "line": <exact line number>, "message": "detailed error description for this specific line"}
   ],
-  "correctedCode": "The fixed version of the code"
+  "correctedCode": "The COMPLETE fixed version of the code - include ALL ${codeLength} lines with corrections applied"
 }
+
+CRITICAL REQUIREMENTS:
+1. The "errors" array MUST include ALL errors found in the code with their EXACT line numbers (1-indexed).
+2. The "correctedCode" MUST be the COMPLETE fixed code - do NOT truncate or abbreviate it.
+3. For "youtubeLinks", provide REAL YouTube URLs for tutorials about the specific ${detectedLang} concepts and errors found. Examples of good channels: freeCodeCamp, Traversy Media, The Coding Train, Corey Schafer, Programming with Mosh, etc.
+4. Analyze every line from line 1 to line ${codeLength} - do not skip any section.
 
 ${explanationLanguage !== 'english' ? `
 CRITICAL LANGUAGE INSTRUCTION: You MUST write ALL explanations, descriptions, and text content in ${explanationLanguage.toUpperCase()} language. This includes:
@@ -441,7 +458,7 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
         },
       ],
       temperature: 0.7,
-      max_tokens: 4096,
+      max_tokens: 16384,
     };
 
     const response = await callOpenRouterWithRetry(requestBody);

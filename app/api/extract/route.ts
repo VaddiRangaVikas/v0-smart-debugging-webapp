@@ -65,13 +65,21 @@ export async function POST(request: NextRequest) {
                 },
                 {
                   type: 'text',
-                  text: `Extract all code from this image. Return ONLY the extracted code, nothing else. No explanations, no markdown formatting, no code blocks. If there are multiple code snippets, combine them in order. If there's no code visible, return an empty string. Preserve the exact formatting, indentation, and line breaks of the original code.`,
+                  text: `Extract ALL code from this image completely. This is CRITICAL:
+1. Return ONLY the extracted code, nothing else
+2. No explanations, no markdown formatting, no code blocks
+3. If there are multiple code snippets, combine them in order
+4. If there's no code visible, return an empty string
+5. Preserve the EXACT formatting, indentation, and line breaks
+6. Extract EVERY SINGLE LINE of code visible in the image - do NOT truncate or skip any lines
+7. For long code, ensure you capture all lines from start to end
+8. Pay attention to all visible text that looks like code`,
                 },
               ],
             },
           ],
           temperature: 0.1,
-          max_tokens: 4096,
+          max_tokens: 16384,
         }),
       });
 
