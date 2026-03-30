@@ -328,21 +328,32 @@ export default function DebugAssistant() {
                 correctedCode={result?.correctedCode ?? ''}
                 diffView={result?.diffView ?? []}
                 hasResult={result !== null}
-                hasErrors={
+                hasErrors={(() => {
+                  // If no result, no errors to show
+                  if (!result) return false;
+                  
                   // Check codeHealth score - if below 100, there are errors
-                  (result?.codeHealth && result.codeHealth.score < 100) ||
-                  // Also check if diffView has any removed/added lines
-                  (result?.diffView && result.diffView.some(d => d.type === 'removed' || d.type === 'added')) ||
-                  // Fallback to error text check
-                  (result?.error 
-                    ? !result.error.toLowerCase().includes('no error') &&
-                      !result.error.toLowerCase().includes('no issues') &&
-                      !result.error.toLowerCase().includes('code is correct') &&
-                      !result.error.toLowerCase().includes('looks correct') &&
-                      !result.error.toLowerCase().includes('correctly implemented') &&
-                      !result.error.toLowerCase().includes('no errors found')
-                    : false)
-                }
+                  if (result.codeHealth && result.codeHealth.score < 100) return true;
+                  
+                  // Check if diffView has any removed/added lines (actual changes)
+                  if (result.diffView && result.diffView.some(d => d.type === 'removed' || d.type === 'added')) return true;
+                  
+                  // Check error text - if it indicates errors exist
+                  if (result.error) {
+                    const errorLower = result.error.toLowerCase();
+                    const noErrorPhrases = [
+                      'no error', 'no errors', 'no issues', 'code is correct', 
+                      'looks correct', 'correctly implemented', 'no errors found',
+                      'no bugs', 'no problems', 'code looks good', 'well written'
+                    ];
+                    // If any "no error" phrase is found, no errors
+                    if (noErrorPhrases.some(phrase => errorLower.includes(phrase))) return false;
+                    // Otherwise there are errors
+                    return true;
+                  }
+                  
+                  return false;
+                })()}
               />
             </div>
           </div>
