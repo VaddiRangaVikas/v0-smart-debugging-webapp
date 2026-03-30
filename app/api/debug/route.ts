@@ -514,9 +514,18 @@ export async function POST(request: NextRequest) {
     const prompt = `You are an AI code debugger. Analyze this ${detectedLang} code for ACTUAL CODE ERRORS ONLY.
 
 RULES:
-- ONLY flag errors causing: compilation failure, runtime crash, or wrong output
-- DO NOT flag: spelling in strings, grammar in comments, style preferences
-- If code is CORRECT, return empty "errors" array and "error": "No errors found. Code is correct."
+- ONLY flag REAL CODE ERRORS: syntax errors, runtime crashes, logical bugs
+- DO NOT flag: spelling in strings, grammar in comments, style preferences, string content
+- If the code will COMPILE and RUN CORRECTLY, it is CORRECT code
+
+IMPORTANT - CODE IS CORRECT IF:
+- It will compile without errors
+- It will run without crashing
+- The logic produces correct output
+- DO NOT flag printf("mesage") as error - string content is NOT a code error
+- DO NOT flag variable naming style - that is preference, not error
+
+If code is CORRECT: Set "error": "No errors found. Code is correct." and "errors": []
 
 CODE WITH LINE NUMBERS (use these EXACT line numbers in errors):
 \`\`\`
@@ -654,19 +663,24 @@ Respond with ONLY the JSON object, no additional text or markdown formatting.`;
 
     const errors = parsedResult.errors || [];
     
-    // Check if there are any real code errors (not just warnings/suggestions)
-    const realErrorTypes = ['syntax', 'runtime', 'logical', 'memory', 'security', 'type_error', 'null_reference', 'boundary'];
-    const hasRealErrors = errors.length > 0 && errors.some((e: { type: string }) => 
-      realErrorTypes.includes(e.type)
-    );
-    
-    // Also check the error message for "no errors" indication
+    // Check the error message for "no errors" indication FIRST
     const errorMessage = (parsedResult.error || '').toLowerCase();
-    const isCodeCorrect = !hasRealErrors || 
+    const errorMessageIndicatesCorrect = 
       errorMessage.includes('no error') || 
       errorMessage.includes('code is correct') ||
       errorMessage.includes('no issues') ||
-      errors.length === 0;
+      errorMessage.includes('correct') ||
+      errorMessage.includes('well-written') ||
+      errorMessage.includes('looks good');
+    
+    // If the AI says code is correct, trust that - ignore any false positive errors
+    const isCodeCorrect = errorMessageIndicatesCorrect || errors.length === 0;
+    
+    // Only consider real errors if the code is NOT marked as correct
+    const realErrorTypes = ['syntax', 'runtime', 'logical', 'memory', 'security', 'type_error', 'null_reference', 'boundary'];
+    const hasRealErrors = !isCodeCorrect && errors.length > 0 && errors.some((e: { type: string }) => 
+      realErrorTypes.includes(e.type)
+    );
     
     // Calculate code health - force 100 if code is correct
     const codeHealth = isCodeCorrect 
